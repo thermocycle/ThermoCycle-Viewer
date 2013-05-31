@@ -1,0 +1,353 @@
+function varargout = disp_cycle(varargin)
+% DISP_CYCLE M-file for disp_cycle.fig
+%      DISP_CYCLE, by itself, creates a new DISP_CYCLE or raises the existing
+%      singleton*.
+%
+%      H = DISP_CYCLE returns the handle to a new DISP_CYCLE or the handle to
+%      the existing singleton*.
+%
+%      DISP_CYCLE('CALLBACK',hObject,eventData,handles,...) calls the local
+%      function named CALLBACK in DISP_CYCLE.M with the given input arguments.
+%
+%      DISP_CYCLE('Property','Value',...) creates a new DISP_CYCLE or raises the
+%      existing singleton*.  Starting from the left, property value pairs are
+%      applied to the GUI before disp_cycle_OpeningFcn gets called.  An
+%      unrecognized property name or invalid value makes property application
+%      stop.  All inputs are passed to disp_cycle_OpeningFcn via varargin.
+%
+%      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
+%      instance to run (singleton)".
+%
+% See also: GUIDE, GUIDATA, GUIHANDLES
+
+% Edit the above text to modify the response to help disp_cycle
+
+% Last Modified by GUIDE v2.5 17-Jun-2011 14:45:48
+
+% Begin initialization code - DO NOT EDIT
+gui_Singleton = 1;
+gui_State = struct('gui_Name',       mfilename, ...
+                   'gui_Singleton',  gui_Singleton, ...
+                   'gui_OpeningFcn', @disp_cycle_OpeningFcn, ...
+                   'gui_OutputFcn',  @disp_cycle_OutputFcn, ...
+                   'gui_LayoutFcn',  [] , ...
+                   'gui_Callback',   []);
+if nargin && ischar(varargin{1})
+    gui_State.gui_Callback = str2func(varargin{1});
+end
+
+if nargout
+    [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
+else
+    gui_mainfcn(gui_State, varargin{:});
+end
+% End initialization code - DO NOT EDIT
+
+
+% --- Executes just before disp_cycle is made visible.
+function disp_cycle_OpeningFcn(hObject, eventdata, handles, varargin)
+% This function has no output args, see OutputFcn.
+% hObject    handle to figure
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+% varargin   command line arguments to disp_cycle (see VARARGIN)
+
+% Choose default command line output for disp_cycle
+handles.output = hObject;
+
+% get file name and load data
+try
+    fname=varargin{1};
+catch
+    p=uigetdir;
+    name=uigetfile;
+    fname=[p,filesep,name];
+end
+
+d=dymload(fname);
+handles.d = d;
+def=def_cycle;
+
+% get main components
+
+lmc = {'Time'};
+
+for i=1:d.nnames
+    pos= strfind(deblank(d.name(i,:)),'.');
+    if ~isempty(pos)
+        mc = deblank(d.name(i,1:pos-1));
+    else
+        mc = deblank(d.name(i,:));
+    end
+    if ~strcmpi(mc,lmc{end})
+        lmc{end+1}=mc;
+    end
+end
+
+set(handles.mainc,'String',lmc);
+
+
+% set time boudaries:
+set(handles.Step,'Value',def.timestep);
+set(handles.Step,'String',num2str(def.timestep));
+Step=get(handles.Step,'Value');
+t_raw=dymget(d,'Time');
+handles.ntp=length(t_raw);
+handles.t_raw = t_raw;
+tstart = t_raw(1);
+tstop = t_raw(end);
+Nsteps = ceil((tstop-tstart)/Step);
+
+set(handles.ttime,'String',['/ ',num2str(tstop)]);
+set(handles.ctime,'String',tstart);
+set(handles.slider,'Min',tstart);
+set(handles.slider,'Max',tstop);
+set(handles.slider,'Value',tstart);
+set(handles.slider,'SliderStep',[1/Nsteps 0.1]);
+
+handles.interp=0;
+handles.def=def;
+handles.data=[];
+plot_ex(handles);
+
+
+% Update handles structure
+guidata(hObject, handles);
+
+% UIWAIT makes disp_cycle wait for user response (see UIRESUME)
+% uiwait(handles.figure1);
+
+
+% --- Outputs from this function are returned to the command line.
+function varargout = disp_cycle_OutputFcn(hObject, eventdata, handles) 
+% varargout  cell array for returning output args (see VARARGOUT);
+% hObject    handle to figure
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Get default command line output from handles structure
+varargout{1} = handles.output;
+
+
+% --- Executes on slider movement.
+function slider_Callback(hObject, eventdata, handles)
+% hObject    handle to slider (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'Value') returns position of slider
+%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
+slidval=get(handles.slider,'Value');
+set(handles.ctime,'Value',slidval);
+set(handles.ctime,'String',num2str(slidval));
+plot_ex(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function slider_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to slider (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: slider controls usually have a light gray background.
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
+
+
+
+function ctime_Callback(hObject, eventdata, handles)
+% hObject    handle to ctime (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of ctime as text
+%        str2double(get(hObject,'String')) returns contents of ctime as a double
+ct=str2double(get(hObject,'String'));
+ct=min(ct,get(handles.slider,'Max'));
+set(handles.slider,'Value',ct);
+set(handles.ctime,'Value',ct);
+set(handles.ctime,'String',ct);
+plot_ex(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function ctime_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to ctime (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in Play.
+function Play_Callback(hObject, eventdata, handles)
+% hObject    handle to Play (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+t=handles.t;
+for i=1:length(t)
+    set(handles.slider,'Value',t(i))
+    set(handles.ctime,'Value',t(i))
+    set(handles.ctime,'String',num2str(t(i)))
+    plot_ex(handles);
+    
+end
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --- Executes on selection change in mainc.
+function mainc_Callback(hObject, eventdata, handles)
+% hObject    handle to mainc (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = get(hObject,'String') returns mainc contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from mainc
+handles.interp=0;
+vn=handles.def.var;
+varN = handles.def.Ncell;
+nc = get(hObject,'String');
+val = get(hObject,'Value');
+nc = nc{val};
+
+try 
+    comp = dymget(handles.d,nc);
+catch
+    beep
+    disp('Unknown component')
+    return
+end
+
+try
+    N = getfield(comp,varN);
+    N = N(1);
+    data = zeros(handles.ntp,N,length(vn));
+    for i=1:length(vn)
+        TT = getfield(comp,vn{i});
+        for j=1:N
+            if length(TT{j}) ~= handles.ntp
+                data(:,j,i) = TT{j}(1) * ones(handles.ntp,1);
+            else
+                data(:,j,i)=TT{j}';
+            end
+        end
+    end
+catch
+    disp('ça pue')
+    return
+end
+
+handles.data=data;
+handles.N = N;
+plot_ex(handles);
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+
+% --- Executes during object creation, after setting all properties.
+function mainc_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to mainc (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function Step_Callback(hObject, eventdata, handles)
+% hObject    handle to Step (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Step as text
+%        str2double(get(hObject,'String')) returns contents of Step as a double
+
+handles.interp=0;
+plot_ex(handles);
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function Step_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Step (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function plot_ex(handles)
+
+%Check that 'data' is not empty
+if isempty(handles.data)
+    text(0.4, 0.5,'Choose a component')
+    return
+end
+
+%Interpolation of data
+step = str2double(get(handles.Step,'String'));
+maxdata=-Inf;
+mindata=Inf;
+if ~handles.interp
+    tstart=handles.t_raw(1);
+    tstop=handles.t_raw(end);    
+    t = tstart:step:tstop;
+    N=handles.N;
+    data_interp = zeros(length(t),N,length(handles.def.var));    
+    for i=1:length(handles.def.var)
+        for j=1:N
+            [time_unique, indexes] = unique(handles.t_raw);  %the unique function has to be applied in order to remove non distinct values (due to rounding)
+            vect = handles.data(:,j,i);
+            data_interp(:,j,i) = interp1(time_unique,vect(indexes),t);
+            if max(data_interp(:,j,i))>maxdata
+                maxdata=max(data_interp(:,j,i));
+            end
+            if min(data_interp(:,j,i))<mindata
+                mindata=min(data_interp(:,j,i));
+            end
+        end
+    end
+    handles.data_interp=data_interp;
+    handles.mindata=mindata;
+    handles.maxdata=maxdata;
+    handles.interp=1;
+    handles.t=t;
+else
+    data_interp = handles.data_interp;
+end
+
+%Clear graph before plotting any other parameters
+c=get(handles.axes1,'Children');
+delete(c);
+
+%Get the time slider value to plot the desired variables
+slidval=get(handles.slider,'Value'); %in secs
+slidval=max(1,floor(slidval/step)+1);
+c=colormap(hsv(length(handles.def.var)));
+for i=1:length(handles.def.var)
+    hold on
+    plot(data_interp(slidval,:,i),'-s','Color',c(i,:),'LineWidth',2,...
+        'MarkerFaceColor',c(i,:),'MarkerEdgeColor','k','Markersize',5)
+end
+legend(handles.def.var,'Location','NorthWest')
+ylim([floor(handles.mindata/10)*10-5, ceil(handles.maxdata/10)*10+5])
+guidata(handles.figure1,handles)
