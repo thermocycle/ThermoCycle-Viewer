@@ -12,7 +12,7 @@ def transpose_strings(name):
     
     return cols
     
-data = scipy.io.loadmat('sample_results.mat')
+data = scipy.io.loadmat('../sample_results.mat')
 
 # print scipy.io.whosmat('sample_results.mat')
 # for key in data.keys():
