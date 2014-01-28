@@ -107,7 +107,12 @@ handles.sat=sat;                                            % Send the saturatio
 clear sat;                                                  % Clear unnecessary memory
 
 % Display and save found thermodynamic states
-Nstates = length(states);
+try
+    Nstates = length(states);
+catch
+    Nstates=0;
+    states=0;
+end 
 disp(strcat(num2str(Nstates),' thermodynamic states have been found'));
 handles.states=states;
 handles.Nstates=Nstates;
