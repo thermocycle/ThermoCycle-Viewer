@@ -13,7 +13,7 @@ def find_matches(l,s):
     """ Find elements in a list of strings where an entry in the list contains the given substring """
     return [el for el in l if el.find(s) > -1]
 
-def read_and_interpolate(filename, Ninterp):
+def find_T_profiles(filename, Ninterp):
     r = Reader(filename, "dymola")
 
     # Names of all the variables in the file
@@ -164,30 +164,35 @@ def find_states(filename, Ninterp):
     
     return raw, processed
             
-def plot_Tprofile_at_step(i, processed, fname = None):
+def plot_Tprofile_at_step(i, processed, fname = None, ax = None):
     """
     Plot each of the profiles at this given time step index of the interpolated data
     """
+    
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        
     for profile in sorted(processed.keys()):
         if profile == 'time': continue
         
         vals =  [el[i] for el in processed[profile]]
             
-        plt.plot(range(len(vals)),vals, 'o-', label = profile)
+        ax.plot(range(len(vals)),vals, 'o-', label = profile)
         
-    plt.legend(loc = 'best')
+    ax.legend(loc = 'best')
     
-    if fname is None:
-        plt.show()
-        plt.close('all')
-    else:
+    if fname is not None:
         plt.savefig(fname, dpi = 100)
-        plt.close()
         
-def plot_Ts_at_step(i, processed, fname = None):
+def plot_Ts_at_step(i, processed, fname = None, ax = None):
     """
     Plot each of the profiles at this given time step index of the interpolated data
     """
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        
     p, h, T, rho, s, fluids = [], [], [], [], [], []
     for k, state in processed.iteritems():
         if k == 'time': continue
@@ -202,27 +207,26 @@ def plot_Ts_at_step(i, processed, fname = None):
         Tsat = np.linspace(CP.Props(fluids[0],'Tmin')+1e-5, CP.Props(fluids[0],'Tcrit')-0.1,200)
         ssatV = CP.PropsSI('S','T',Tsat,'Q',1,fluids[0])
         ssatL = CP.PropsSI('S','T',Tsat,'Q',0,fluids[0])
-        plt.plot(ssatV,Tsat,'k')
-        plt.plot(ssatL,Tsat,'k')
+        ax.plot(ssatV,Tsat,'k')
+        ax.plot(ssatL,Tsat,'k')
         
-    plt.plot(s, T, 'o')
+    ax.plot(s, T, 'o')
     
-    if fname is None:
-        plt.show()
-        plt.close('all')
-    else:
+    if fname is not None:
         plt.savefig(fname, dpi = 100)
+    
+if __name__=='__main__':
+    raw_T_profile, processed_T_profile = find_T_profiles("SQThesisModel.mat", 200)
+    raw_states, processed_states = find_states("SQThesisModel.mat", 200)
+    
+    for i in range(200):
+        plot_Ts_at_step(i, processed_states, 'States{s:05d}.png'.format(s = i))
         plt.close()
-    
-raw_T_profile, processed_T_profile = read_and_interpolate("SQThesisModel.mat", 200)
-raw_states, processed_states = find_states("SQThesisModel.mat", 200)
-
-for i in range(200):
-    plot_Ts_at_step(i, processed_states, 'States{s:05d}.png'.format(s = i))
-subprocess.call('convert States*.png StatesAnimation.gif', shell = True)
-subprocess.call('erase States*.png', shell = True)
-    
-for i in range(200):
-    plot_Tprofile_at_step(i, processed_T_profile, 'Tprofile{s:05d}.png'.format(s = i))
-subprocess.call('convert Tprofile*.png TprofileAnimation.gif', shell = True)
-subprocess.call('erase Tprofile*.png', shell = True)
+    subprocess.call('convert States*.png StatesAnimation.gif', shell = True)
+    subprocess.call('erase States*.png', shell = True)
+        
+    for i in range(200):
+        plot_Tprofile_at_step(i, processed_T_profile, 'Tprofile{s:05d}.png'.format(s = i))
+        plt.close()
+    subprocess.call('convert Tprofile*.png TprofileAnimation.gif', shell = True)
+    subprocess.call('erase Tprofile*.png', shell = True)
