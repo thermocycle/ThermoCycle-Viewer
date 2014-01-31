@@ -200,8 +200,8 @@ def plot_Ts_at_step(i, processed, fname = None):
             
     if len(set(fluids)) == 1: # all fluids are the same
         Tsat = np.linspace(CP.Props(fluids[0],'Tmin')+1e-5, CP.Props(fluids[0],'Tcrit')-0.1,200)
-        ssatV = CP.Props('S','T',Tsat,'Q',1,fluids[0])*1000
-        ssatL = CP.Props('S','T',Tsat,'Q',0,fluids[0])*1000
+        ssatV = CP.PropsSI('S','T',Tsat,'Q',1,fluids[0])
+        ssatL = CP.PropsSI('S','T',Tsat,'Q',0,fluids[0])
         plt.plot(ssatV,Tsat,'k')
         plt.plot(ssatL,Tsat,'k')
         
