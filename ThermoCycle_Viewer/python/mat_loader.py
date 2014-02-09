@@ -61,6 +61,9 @@ def find_T_profiles(filename, Ninterp):
                     if 'time' not in raw:
                         raw['time'] = time
     
+    max_Tprofile = {}
+    min_Tprofile = {}
+    
     # Make a deepcopy to make sure the data gets copied, and not just the pointers
     processed = copy.deepcopy(raw)
     
@@ -80,11 +83,17 @@ def find_T_profiles(filename, Ninterp):
             el_new = scipy.interpolate.interp1d(time_old, el)(time_interp)
             
             processed[profile][i] = el_new
+            
+            if profile not in max_Tprofile or np.max(el_new) > max_Tprofile[profile]:
+                max_Tprofile[profile] = np.max(el_new)
+                
+            if profile not in min_Tprofile or np.min(el_new) < min_Tprofile[profile]:
+                min_Tprofile[profile] = np.min(el_new)
     
     # Save the gridded time into processed
     processed['time'] = time_interp
     
-    return raw, processed
+    return raw, processed, min_Tprofile, max_Tprofile
     
 def find_states(filename, Ninterp):
     
@@ -97,7 +106,10 @@ def find_states(filename, Ninterp):
         ps = []
         for fluid in CoolProp.__fluids__:
             if T[0] < CP.Props(fluid, 'Tmin'): continue
-            ps.append(CP.Props('P','T',float(T[0]),'D',float(rho[0]),fluid))
+            try:
+                ps.append(CP.Props('P','T',float(T[0]),'D',float(rho[0]),fluid))
+            except ValueError:
+                pass
         
         diffs = np.abs(np.array(ps) - p[0])
         
@@ -164,7 +176,7 @@ def find_states(filename, Ninterp):
     
     return raw, processed
             
-def plot_Tprofile_at_step(i, processed, fname = None, ax = None):
+def plot_Tprofile_at_step(i, processed, fname = None, ax = None, root = None, Tmin = None, Tmax = None):
     """
     Plot each of the profiles at this given time step index of the interpolated data
     """
@@ -173,14 +185,37 @@ def plot_Tprofile_at_step(i, processed, fname = None, ax = None):
         fig = plt.figure()
         ax = fig.add_subplot(111)
         
+    ymin = 1e7
+    ymax = 0
+        
     for profile in sorted(processed.keys()):
         if profile == 'time': continue
         
+        if root is not None:
+            if not profile.startswith(root):
+                continue
+        
         vals =  [el[i] for el in processed[profile]]
+        
+        if Tmin is not None and Tmin[profile] < ymin:
+            ymin = Tmin[profile]
+        
+        if Tmax is not None and Tmax[profile] > ymax:
+            ymax = Tmax[profile]
             
-        ax.plot(range(len(vals)),vals, 'o-', label = profile)
+        if root is not None:
+            # Strip off the root, keep just to the right of the last '.'
+            label = profile.rsplit('.',1)[1]
+        else:
+            # Keep everything
+            label = profile
+            
+        ax.plot(range(len(vals)),vals, 'o-', label = label)
         
     ax.legend(loc = 'best')
+    
+    if Tmin is not None and Tmax is not None:
+        ax.set_ylim((ymin,ymax))
     
     if fname is not None:
         plt.savefig(fname, dpi = 100)
