@@ -28,6 +28,7 @@ class BottomPanel(wx.Panel):
     def __init__(self, parent):
         wx.Panel.__init__(self, parent)
         
+        sizer = wx.BoxSizer(wx.VERTICAL)
         self.step = wx.Slider(self, 
                             minValue = 1, 
                             maxValue = 200, 
@@ -37,6 +38,9 @@ class BottomPanel(wx.Panel):
             )
 
         self.step.SetTickFreq(10, 1)
+        sizer.Add(self.step,1,wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
+        self.SetSizer(sizer)
+        sizer.Layout()
     
 class MainFrame(wx.Frame):
     """
@@ -49,11 +53,13 @@ class MainFrame(wx.Frame):
         self.splitter = wx.SplitterWindow(self)
         
         leftpanel = wx.Window(self.splitter, style = wx.BORDER_SUNKEN)
-        self.T_profile_listing = wx.CheckListBox(leftpanel)
+        self.T_profile_listing = wx.ComboBox(leftpanel)
         self.T_profile_plot = PlotPanel(leftpanel)
         
         leftpanelsizer = wx.BoxSizer(wx.VERTICAL)
+        leftpanelsizer.AddSpacer(10)
         leftpanelsizer.Add(self.T_profile_listing, 0, wx.ALIGN_CENTER_HORIZONTAL)
+        leftpanelsizer.AddSpacer(10)
         leftpanelsizer.Add(self.T_profile_plot, 1, wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND)
         leftpanel.SetSizer(leftpanelsizer)
         
@@ -109,14 +115,22 @@ class MainFrame(wx.Frame):
             How many elements in the interpolated time
         """
         
-        raw_T_profile, self.processed_T_profile = find_T_profiles(mat, 200)
+        raw_T_profile, self.processed_T_profile, self.Tmin_T_profile, self.Tmax_T_profile = find_T_profiles(mat, 200)
         raw_states, self.processed_states = find_states(mat, 200)
         keys = self.processed_T_profile.keys()
         keys.remove('time')
         
-        self.T_profile_listing.AppendItems(sorted(keys))
+        profiles = set([key.rsplit('.',1)[0] for key in keys])
+        
+        self.T_profile_listing.AppendItems(sorted(profiles))
         self.T_profile_listing.Fit()
         self.T_profile_listing.Refresh()
+        self.T_profile_listing.SetSelection(0)
+        
+        # Start at beginning of simulation
+        self.bottompanel.step.SetValue(1)
+        # Force a refresh
+        self.OnChangeStep()
         
     def OnChangeStep(self, event = None):
         """
@@ -124,7 +138,7 @@ class MainFrame(wx.Frame):
         """
         
         # Get the slider value
-        i = event.EventObject.GetValue()
+        i = self.bottompanel.step.GetValue()
         
         # --------------- State points ----------------------
         
@@ -148,8 +162,17 @@ class MainFrame(wx.Frame):
         # Make a new axis to plot onto
         self.T_profile_plot.ax = self.T_profile_plot.figure.add_subplot(111)
         
-        # Plot the state points on T-s coordinates
-        plot_Tprofile_at_step(i-1,self.processed_T_profile, ax = self.T_profile_plot.ax)
+        # Get the profile that is selected
+        profile = self.T_profile_listing.GetStringSelection()
+        
+        # Plot the profiles
+        plot_Tprofile_at_step(i-1,
+                              self.processed_T_profile, 
+                              ax = self.T_profile_plot.ax,
+                              root = profile,
+                              Tmin = self.Tmin_T_profile,
+                              Tmax = self.Tmax_T_profile
+                              )
         
         # Force a redraw
         self.T_profile_plot.canvas.draw()
