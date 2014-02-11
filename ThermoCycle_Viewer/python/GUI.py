@@ -149,6 +149,7 @@ class MainFrame(wx.Frame):
         self.state_plot_chooser = wx.ComboBox(rightpanel)
         self.state_plot_chooser.AppendItems(['Temperature/entropy','Pressure/enthalpy','Pressure/density'])
         self.state_plot_chooser.SetSelection(0)
+        self.state_plot_chooser.Enabled = False
         rightpanelsizer = wx.BoxSizer(wx.VERTICAL)
         rightpanelsizer.AddSpacer(10)
         rightpanelsizer.Add(self.state_plot_chooser, 0, wx.ALIGN_CENTER_HORIZONTAL)
