@@ -5,6 +5,7 @@ import sys
 from multiprocessing import freeze_support
 from mat_loader import *
 import matplotlib as mpl
+from wx.lib.wordwrap import wordwrap
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 from matplotlib.backends.backend_wxagg import NavigationToolbar2Wx as Toolbar        
         
@@ -105,13 +106,16 @@ class MainFrame(wx.Frame):
         self.File = wx.Menu()
         self.menuFileOpen = wx.MenuItem(self.File, -1, "Open MAT file...\tCtrl+O", "", wx.ITEM_NORMAL)
         self.menuFileQuit = wx.MenuItem(self.File, -1, "Quit\tCtrl+Q", "", wx.ITEM_NORMAL)
+        self.menuFileAbout = wx.MenuItem(self.File, -1, "About", "", wx.ITEM_NORMAL)
         self.File.AppendItem(self.menuFileOpen)
+        self.File.AppendItem(self.menuFileAbout)
         self.File.AppendItem(self.menuFileQuit)
         self.MenuBar.Append(self.File, "File")
         
         # Bind event handlers
         self.Bind(wx.EVT_MENU,self.OnLoadMat,self.menuFileOpen)
         self.Bind(wx.EVT_MENU,self.OnQuit,self.menuFileQuit)
+        self.Bind(wx.EVT_MENU,self.OnAbout,self.menuFileAbout)
         
         #Actually add menu bar
         self.SetMenuBar(self.MenuBar)  
@@ -212,10 +216,43 @@ class MainFrame(wx.Frame):
         if wx.ID_OK == FD.ShowModal():
             
             file_path = FD.GetPath()
+#             dlg = wx.TextEntryDialog(
+#                     self, 'What is your favorite programming language?',
+#                     'Eh??', 'Python')
+#     
+#             dlg.SetValue("Python is the best!")
+#     
+#             if dlg.ShowModal() == wx.ID_OK:
+#                 self.log.WriteText('You entered: %s\n' % dlg.GetValue())
+#     
+#         dlg.Destroy()
+
+
             N = 200 #TODO: get from user
             self.LoadMat(file_path, N)
             
         FD.Destroy()
+        
+    def OnAbout(self, event = None):
+        
+        if "unicode" in wx.PlatformInfo:
+            wx_unicode = '\nwx Unicode support: True\n'
+        else:
+            wx_unicode = '\nwx Unicode support: False\n'
+        
+        import CoolProp
+        info = wx.AboutDialogInfo()
+        info.Name = "ThermoCycle Viewer"
+        info.Copyright = "(C) 2014 Ian Bell, Sylvain Quoilin, Adriano Desideri, Vincent Lemort"
+        info.Description = wordwrap(
+            "A graphical user interface viewer for results from Thermocycle\n\n"+
+            "scipy version: " +scipy.__version__+'\n'
+            "CoolProp version: "+CoolProp.__version__,
+            350, wx.ClientDC(self))
+        info.WebSite = ("https://github.com/thermocycle", "Thermocycle home page")
+
+        # Then we call wx.AboutBox giving it that info object
+        wx.AboutBox(info)
     
     def OnQuit(self, event):
         self.Destroy()
