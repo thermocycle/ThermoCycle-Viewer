@@ -39,7 +39,13 @@ class BottomPanel(wx.Panel):
 
         self.step.SetTickFreq(10, 1)
         sizer.Add(self.step,1,wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
+        timesizer = wx.BoxSizer(wx.HORIZONTAL)
+        timesizer.Add(wx.StaticText(self,label = "time [s]"),0)
+        self.timetext = wx.TextCtrl(self, value = '0.0')
+        timesizer.Add(self.timetext,0)
+        sizer.Add(timesizer,1,wx.ALIGN_CENTER_HORIZONTAL)
         self.SetSizer(sizer)
+        timesizer.Layout()
         sizer.Layout()
     
 class MainFrame(wx.Frame):
@@ -64,8 +70,15 @@ class MainFrame(wx.Frame):
         leftpanel.SetSizer(leftpanelsizer)
         
         rightpanel = wx.Window(self.splitter, style = wx.BORDER_SUNKEN)
+        
         self.state_points_plot = PlotPanel(rightpanel)
+        self.state_plot_chooser = wx.ComboBox(rightpanel)
+        self.state_plot_chooser.AppendItems(['Temperature/entropy','Pressure/enthalpy','Pressure/density'])
+        self.state_plot_chooser.SetSelection(0)
         rightpanelsizer = wx.BoxSizer(wx.VERTICAL)
+        rightpanelsizer.AddSpacer(10)
+        rightpanelsizer.Add(self.state_plot_chooser, 0, wx.ALIGN_CENTER_HORIZONTAL)
+        rightpanelsizer.AddSpacer(10)
         rightpanelsizer.Add(self.state_points_plot, 1, wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
         rightpanel.SetSizer(rightpanelsizer)
         
@@ -140,6 +153,11 @@ class MainFrame(wx.Frame):
         # Get the slider value
         i = self.bottompanel.step.GetValue()
         
+        # ---------------- time ------------------
+        
+        #Update the text version of the time
+        self.bottompanel.timetext.SetValue(str(self.processed_states['time'][i-1]))
+        
         # --------------- State points ----------------------
         
         # Clear the figure
@@ -174,8 +192,13 @@ class MainFrame(wx.Frame):
                               Tmax = self.Tmax_T_profile
                               )
         
+        
+        
         # Force a redraw
         self.T_profile_plot.canvas.draw()
+        
+        
+
         
         
         
