@@ -98,6 +98,12 @@ class MainFrame(wx.Frame):
         
         self.make_menu_bar()
         
+        # Make a new axis to plot onto
+        self.state_points_plot.ax = self.state_points_plot.figure.add_subplot(111)\
+        
+        # Make a new axis to plot onto
+        self.T_profile_plot.ax = self.T_profile_plot.figure.add_subplot(111)
+        
     def make_menu_bar(self):
         
         # Menu Bar
@@ -132,8 +138,8 @@ class MainFrame(wx.Frame):
             How many elements in the interpolated time
         """
         
-        raw_T_profile, self.processed_T_profile, self.Tmin_T_profile, self.Tmax_T_profile = find_T_profiles(mat, 200)
-        raw_states, self.processed_states = find_states(mat, 200)
+        raw_T_profile, self.processed_T_profile, self.Tmin_T_profile, self.Tmax_T_profile = find_T_profiles(mat, N)
+        raw_states, self.processed_states = find_states(mat, N)
         keys = self.processed_T_profile.keys()
         keys.remove('time')
         
@@ -145,6 +151,7 @@ class MainFrame(wx.Frame):
         self.T_profile_listing.SetSelection(0)
         
         # Start at beginning of simulation
+        self.bottompanel.step.SetMax(N)
         self.bottompanel.step.SetValue(1)
         # Force a refresh
         self.OnChangeStep()
@@ -164,11 +171,8 @@ class MainFrame(wx.Frame):
         
         # --------------- State points ----------------------
         
-        # Clear the figure
-        self.state_points_plot.figure.clf()
-        
-        # Make a new axis to plot onto
-        self.state_points_plot.ax = self.state_points_plot.figure.add_subplot(111)
+        # Clear the axis
+        self.state_points_plot.ax.cla()
         
         # Plot the state points on T-s coordinates
         plot_Ts_at_step(i-1,self.processed_states, ax = self.state_points_plot.ax)
@@ -179,10 +183,7 @@ class MainFrame(wx.Frame):
         # -------------- T profiles -----------------------
         
         # Clear the figure
-        self.T_profile_plot.figure.clf()
-        
-        # Make a new axis to plot onto
-        self.T_profile_plot.ax = self.T_profile_plot.figure.add_subplot(111)
+        self.T_profile_plot.ax.cla()
         
         # Get the profile that is selected
         profile = self.T_profile_listing.GetStringSelection()
@@ -202,10 +203,6 @@ class MainFrame(wx.Frame):
         self.T_profile_plot.canvas.draw()
         
         
-
-        
-        
-        
     def OnLoadMat(self, event = None):
         FD = wx.FileDialog(None,
                            "Load MAT file",
@@ -214,21 +211,22 @@ class MainFrame(wx.Frame):
                            style = wx.FD_OPEN|wx.FD_FILE_MUST_EXIST)
         
         if wx.ID_OK == FD.ShowModal():
-            
-            file_path = FD.GetPath()
-#             dlg = wx.TextEntryDialog(
-#                     self, 'What is your favorite programming language?',
-#                     'Eh??', 'Python')
-#     
-#             dlg.SetValue("Python is the best!")
-#     
-#             if dlg.ShowModal() == wx.ID_OK:
-#                 self.log.WriteText('You entered: %s\n' % dlg.GetValue())
-#     
-#         dlg.Destroy()
+            isok = False
+            while isok == False:
+                file_path = FD.GetPath()
+                dlg = wx.TextEntryDialog(
+                        self, 'How many time steps in interpolated time vector?',
+                        'Number of time steps', '200')
+    
+                if dlg.ShowModal() == wx.ID_OK:
+                    try:
+                        N = int(dlg.GetValue())
+                        isok = True
+                    except ValueError:
+                        isok = False
+    
+                dlg.Destroy()
 
-
-            N = 200 #TODO: get from user
             self.LoadMat(file_path, N)
             
         FD.Destroy()
