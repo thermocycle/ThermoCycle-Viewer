@@ -30,6 +30,8 @@ path = []
 
 import glob,os
 
+include_files += ['logo_thermocycle.png']
+
 # The setup for cx_Freeze is different from py2exe. Here I am going to
 # use the Python class Executable from cx_Freeze
 
@@ -85,14 +87,5 @@ if sys.platform.startswith('win'):
     import subprocess
     #Compress the files if UPX is found on the system path
     subprocess.call(['upx','ThermoCycleViewer/*.*'])
-#     #Make an installer using InnoSetup
-#     subprocess.call(['C:\Program Files (x86)\Inno Setup 5\Compil32.exe','/cc','package_gui.iss'])
-#     #Rename the installer to include the PDSim version
-#     old_name = os.path.join('Output','SetupPDSimGUI.exe')
-#     import PDSim
-#     new_name = os.path.join('Output','SetupPDSimGUI_version-'+PDSim.__version__+'.exe')
-#     if os.path.exists(new_name):
-#         os.remove(new_name)
-#     os.rename(old_name, new_name)
-# # And we are done. That's a setup script :-D
-# 
+    #Make an installer using InnoSetup
+    subprocess.call(['C:\Program Files (x86)\Inno Setup 5\Compil32.exe','/cc','innosetup.iss'])
