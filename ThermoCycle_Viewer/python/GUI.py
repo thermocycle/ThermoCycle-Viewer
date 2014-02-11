@@ -2,13 +2,43 @@ import matplotlib
 matplotlib.use('WXAgg')
 import wx
 import sys
+import os
+import time
 from multiprocessing import freeze_support
 from mat_loader import *
 import matplotlib as mpl
 from wx.lib.wordwrap import wordwrap
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 from matplotlib.backends.backend_wxagg import NavigationToolbar2Wx as Toolbar        
-        
+import threading
+
+
+class SplashScreen(wx.SplashScreen):
+    """
+    Create a splash screen widget.
+    """
+    def __init__(self, parent=None, time = 1):
+        # This is a recipe to a the screen.
+        # Modify the following variables as necessary.
+        img = wx.Image(name = "logo_thermocycle.png")
+        width, height = img.GetWidth(), img.GetHeight()
+        width *= 0.5
+        height *= 0.5
+        aBitmap = img.Rescale(width,height).ConvertToBitmap()
+        splashStyle = wx.SPLASH_CENTRE_ON_SCREEN | wx.SPLASH_TIMEOUT
+        splashDuration = time*1000 # milliseconds
+        # Call the constructor with the above arguments in exactly the
+        # following order.
+        wx.SplashScreen.__init__(self, aBitmap, splashStyle,
+                                 splashDuration, parent)
+        self.Bind(wx.EVT_CLOSE, self.OnExit)
+
+        wx.Yield()
+
+    def OnExit(self, evt):
+        self.Hide()
+        evt.Skip()  # Make sure the default handler runs too...
+                
 class PlotPanel(wx.Panel):
     def __init__(self, parent, id = -1, dpi = None, **kwargs):
         wx.Panel.__init__(self, parent, id=id, **kwargs)
@@ -44,11 +74,49 @@ class BottomPanel(wx.Panel):
         timesizer.Add(wx.StaticText(self,label = "time [s]"),0)
         self.timetext = wx.TextCtrl(self, value = '0.0')
         timesizer.Add(self.timetext,0)
-        sizer.Add(timesizer,1,wx.ALIGN_CENTER_HORIZONTAL)
+        self.play_button = wx.ToggleButton(self, label='Play')
+        sizer.Add(timesizer,0,wx.ALIGN_CENTER_HORIZONTAL)
+        sizer.Add(self.play_button,0,wx.ALIGN_CENTER_HORIZONTAL)
         self.SetSizer(sizer)
         timesizer.Layout()
         sizer.Layout()
+        
     
+class PlotThread(threading.Thread):
+    """Thread that executes a task every N seconds"""
+    
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self._finished = threading.Event()
+        self._interval = 15.0
+    
+    def setInterval(self, interval):
+        """Set the number of seconds we sleep between executing our task"""
+        self._interval = interval
+    
+    def shutdown(self):
+        """Stop this thread"""
+        self._finished.set()
+    
+    def run(self):
+        while 1:
+            if self._finished.isSet(): return
+            self.task()
+            
+            # sleep for interval or until shutdown
+            self._finished.wait(self._interval)
+    
+    def task(self):
+        """The task done by this thread - override in subclasses"""
+        raise Exception
+
+    def setGUI(self,GUI):
+        self._GUI=GUI
+
+    def task(self):
+        if self._GUI.btn.Value == True:
+            wx.CallAfter(self._GUI.plot_tep)
+                
 class MainFrame(wx.Frame):
     """
     The main frame
@@ -95,6 +163,7 @@ class MainFrame(wx.Frame):
         sizer.Layout()
         
         self.bottompanel.step.Bind(wx.EVT_SLIDER, self.OnChangeStep)
+        self.bottompanel.play_button.Bind(wx.EVT_BUTTON, self.OnPlay)
         
         self.make_menu_bar()
         
@@ -155,6 +224,11 @@ class MainFrame(wx.Frame):
         self.bottompanel.step.SetValue(1)
         # Force a refresh
         self.OnChangeStep()
+        
+    def plot_step(self, event = None):
+        
+        # Get the slider value
+        i = self.bottompanel.step.GetValue()
         
     def OnChangeStep(self, event = None):
         """
@@ -255,6 +329,27 @@ class MainFrame(wx.Frame):
     def OnQuit(self, event):
         self.Destroy()
         wx.Exit()
+        
+#     def OnPlay(self, event):
+#         
+#         """
+#         Start the plotting machinery
+#         """
+#         self.PT=PlotThread()
+#         self.PT.setDaemon(True)
+#         self.PT.setGUI(self) #pass it an instance of the frame (by reference)
+#         self.PT.setInterval(0.05) #delay between plot events
+#         self.PT.start()
+        
+    def OnPlay(self, event):
+        """
+        Runs the thread
+        """
+        btn = event.GetEventObject()
+        if btn.GetValue()==True:
+            btn.SetLabel("Stop Animation")
+        else:
+            btn.SetLabel("Start Animation")
                           
 if __name__ == '__main__':
     # The following line is required to allow cx_Freeze 
@@ -264,6 +359,11 @@ if __name__ == '__main__':
     
     app = wx.App(False)
     
+    if '--nosplash' not in sys.argv:
+        Splash=SplashScreen(time = 1.0)
+        Splash.Show()
+        time.sleep(1.0)
+        
     frame = MainFrame()
     frame.Show(True)
 
