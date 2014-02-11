@@ -22,8 +22,8 @@ class SplashScreen(wx.SplashScreen):
         # Modify the following variables as necessary.
         img = wx.Image(name = "logo_thermocycle.png")
         width, height = img.GetWidth(), img.GetHeight()
-        width *= 0.5
-        height *= 0.5
+        width *= 1
+        height *= 1
         aBitmap = img.Rescale(width,height).ConvertToBitmap()
         splashStyle = wx.SPLASH_CENTRE_ON_SCREEN | wx.SPLASH_TIMEOUT
         splashDuration = time*1000 # milliseconds
@@ -119,8 +119,6 @@ class PlotThread(threading.Thread):
         self._GUI=GUI
 
     def task(self):
-        print self._GUI.bottompanel.play_button
-        print self._GUI.bottompanel.play_button.GetValue()
         if self._GUI.bottompanel.play_button.GetValue() == True:
             wx.CallAfter(self._GUI.plot_step)
                 
@@ -365,7 +363,7 @@ class MainFrame(wx.Frame):
             self.PT=PlotThread()
             self.PT.setDaemon(True)
             self.PT.setGUI(self) #pass it an instance of the frame (by reference)
-            self.PT.setInterval(0.05) #delay between plot events
+            self.PT.setInterval(0.0) #delay between plot events
             self.PT.start()
         
         else:
