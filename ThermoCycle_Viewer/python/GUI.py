@@ -73,10 +73,15 @@ class BottomPanel(wx.Panel):
         timesizer = wx.BoxSizer(wx.HORIZONTAL)
         timesizer.Add(wx.StaticText(self,label = "time [s]"),0)
         self.timetext = wx.TextCtrl(self, value = '0.0')
+        timesizer.AddSpacer(8)
         timesizer.Add(self.timetext,0)
-        self.play_button = wx.ToggleButton(self, label='Play')
+        self.play_button = wx.ToggleButton(self, label='Start Animation')
+        timesizer.AddSpacer(8)
+        timesizer.Add(self.play_button,0,wx.ALIGN_CENTER_HORIZONTAL)
+        
         sizer.Add(timesizer,0,wx.ALIGN_CENTER_HORIZONTAL)
-        sizer.Add(self.play_button,0,wx.ALIGN_CENTER_HORIZONTAL)
+        sizer.AddSpacer(5)
+        
         self.SetSizer(sizer)
         timesizer.Layout()
         sizer.Layout()
@@ -114,8 +119,10 @@ class PlotThread(threading.Thread):
         self._GUI=GUI
 
     def task(self):
-        if self._GUI.btn.Value == True:
-            wx.CallAfter(self._GUI.plot_tep)
+        print self._GUI.bottompanel.play_button
+        print self._GUI.bottompanel.play_button.GetValue()
+        if self._GUI.bottompanel.play_button.GetValue() == True:
+            wx.CallAfter(self._GUI.plot_step)
                 
 class MainFrame(wx.Frame):
     """
@@ -163,12 +170,12 @@ class MainFrame(wx.Frame):
         sizer.Layout()
         
         self.bottompanel.step.Bind(wx.EVT_SLIDER, self.OnChangeStep)
-        self.bottompanel.play_button.Bind(wx.EVT_BUTTON, self.OnPlay)
+        self.bottompanel.play_button.Bind(wx.EVT_TOGGLEBUTTON, self.OnPlay)
         
         self.make_menu_bar()
         
         # Make a new axis to plot onto
-        self.state_points_plot.ax = self.state_points_plot.figure.add_subplot(111)\
+        self.state_points_plot.ax = self.state_points_plot.figure.add_subplot(111)
         
         # Make a new axis to plot onto
         self.T_profile_plot.ax = self.T_profile_plot.figure.add_subplot(111)
@@ -229,6 +236,18 @@ class MainFrame(wx.Frame):
         
         # Get the slider value
         i = self.bottompanel.step.GetValue()
+        
+        # Get the total number of steps
+        N = self.bottompanel.step.GetMax()
+        
+        # Use mod operator to avoid overflow
+        i_new = (i+1)%N
+        
+        # Set the value
+        self.bottompanel.step.SetValue(i_new)
+        
+        # Re-plot
+        self.OnChangeStep()
         
     def OnChangeStep(self, event = None):
         """
@@ -332,22 +351,23 @@ class MainFrame(wx.Frame):
         
 #     def OnPlay(self, event):
 #         
-#         """
-#         Start the plotting machinery
-#         """
-#         self.PT=PlotThread()
-#         self.PT.setDaemon(True)
-#         self.PT.setGUI(self) #pass it an instance of the frame (by reference)
-#         self.PT.setInterval(0.05) #delay between plot events
-#         self.PT.start()
+
         
     def OnPlay(self, event):
         """
-        Runs the thread
+        Starts the plotting thread
         """
         btn = event.GetEventObject()
         if btn.GetValue()==True:
             btn.SetLabel("Stop Animation")
+            
+            # Start the plotting machinery
+            self.PT=PlotThread()
+            self.PT.setDaemon(True)
+            self.PT.setGUI(self) #pass it an instance of the frame (by reference)
+            self.PT.setInterval(0.05) #delay between plot events
+            self.PT.start()
+        
         else:
             btn.SetLabel("Start Animation")
                           
