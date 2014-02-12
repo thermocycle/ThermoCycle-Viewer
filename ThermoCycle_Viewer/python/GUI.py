@@ -12,7 +12,6 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 from matplotlib.backends.backend_wxagg import NavigationToolbar2Wx as Toolbar        
 import threading
 
-
 class SplashScreen(wx.SplashScreen):
     """
     Create a splash screen widget.
@@ -468,6 +467,9 @@ if __name__ == '__main__':
     # to package multiprocessing properly.  Must be the first line 
     # after if __name__ == '__main__':
     freeze_support()
+    
+    # This line is to make wxpython 3.0 happy on windows XP
+    wx.Log.SetLogLevel(0)
     
     app = wx.App(False)
     
