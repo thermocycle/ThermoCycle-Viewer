@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from buildingspy.io.outputfile import Reader
 import numpy as np
 import matplotlib.pyplot as plt
@@ -90,6 +92,8 @@ def find_T_profiles(filename, Ninterp):
             if profile not in min_Tprofile or np.min(el_new) < min_Tprofile[profile]:
                 min_Tprofile[profile] = np.min(el_new)
     
+    processed['limits'] = dict(Tmin = min_Tprofile, Tmax = max_Tprofile)
+    
     # Save the gridded time into processed
     processed['time'] = time_interp
     
@@ -101,17 +105,16 @@ def find_states(filename, Ninterp):
         time, T = r.values(key + '.T')
         time, rho = r.values(key + '.d')
         time, p = r.values(key + '.p')
-        p /= 1000
         
         ps = []
         for fluid in CoolProp.__fluids__:
             if T[0] < CP.Props(fluid, 'Tmin'): continue
             try:
-                ps.append(CP.Props('P','T',float(T[0]),'D',float(rho[0]),fluid))
+                ps.append(CP.PropsSI('P','T',float(T[0]),'D',float(rho[0]),fluid))
             except ValueError:
-                pass
+                ps.append(1e99)
         
-        diffs = np.abs(np.array(ps) - p[0])
+        diffs = np.abs((np.array(ps) - p[0])/p[0])
         
         diffs, fluids = zip(*sorted(zip(diffs,CoolProp.__fluids__)))
         
@@ -174,9 +177,56 @@ def find_states(filename, Ninterp):
     # Save the gridded time into processed
     processed['time'] = time_interp
     
+    # Post-process the processed states and put them into a list of dictionaries of lists
+    states = []
+    all_fluids = []
+    limits = {}
+    for i in range(len(time_interp)):
+        p, h, T, rho, s, fluids = [], [], [], [], [], []
+        for k, state in processed.iteritems():
+            if k == 'time': continue
+            p.append(state.p[i])
+            h.append(state.h[i])
+            T.append(state.T[i])
+            rho.append(state.d[i])
+            s.append(state.s[i])
+            fluids.append(state.fluid)
+            
+            if 'pmax' not in limits or state.p[i] > limits['pmax']:
+                limits['pmax'] = state.p[i]
+            if 'pmin' not in limits or state.p[i] < limits['pmin']:
+                limits['pmin'] = state.p[i]
+            if 'Tmax' not in limits or state.T[i] > limits['Tmax']:
+                limits['Tmax'] = state.T[i]
+            if 'Tmin' not in limits or state.T[i] < limits['Tmin']:
+                limits['Tmin'] = state.T[i]
+            if 'smax' not in limits or state.s[i] > limits['smax']:
+                limits['smax'] = state.s[i]
+            if 'smin' not in limits or state.s[i] < limits['smin']:
+                limits['smin'] = state.s[i]
+            if 'hmax' not in limits or state.h[i] > limits['hmax']:
+                limits['hmax'] = state.h[i]
+            if 'hmin' not in limits or state.h[i] < limits['hmin']:
+                limits['hmin'] = state.h[i]
+            _rho = state.d[i]
+            if 'rhomax' not in limits or _rho > limits['rhomax']:
+                limits['rhomax'] = _rho
+            if 'rhomin' not in limits or _rho < limits['rhomin']:
+                limits['rhomin'] = _rho
+                
+            # Get a list of all fluids found in all state instances
+            if state.fluid not in all_fluids:
+                all_fluids.append(state.fluid)
+        
+        states.append(dict(p=p,h=h,T=T,rho = rho,s=s,fluids = fluids))
+    
+    processed['states'] = states
+    processed['fluids'] = all_fluids
+    processed['limits'] = limits
+        
     return raw, processed
             
-def plot_Tprofile_at_step(i, processed, fname = None, ax = None, root = None, Tmin = None, Tmax = None):
+def plot_Tprofile_at_step(i, processed, fname = None, ax = None):
     """
     Plot each of the profiles at this given time step index of the interpolated data
     """
@@ -185,42 +235,19 @@ def plot_Tprofile_at_step(i, processed, fname = None, ax = None, root = None, Tm
         fig = plt.figure()
         ax = fig.add_subplot(111)
         
-    ymin = 1e7
-    ymax = 0
-        
     for profile in sorted(processed.keys()):
         if profile == 'time': continue
         
-        if root is not None:
-            if not profile.startswith(root):
-                continue
-        
         vals =  [el[i] for el in processed[profile]]
-        
-        if Tmin is not None and Tmin[profile] < ymin:
-            ymin = Tmin[profile]
-        
-        if Tmax is not None and Tmax[profile] > ymax:
-            ymax = Tmax[profile]
-            
-        if root is not None:
-            # Strip off the root, keep just to the right of the last '.'
-            label = profile.rsplit('.',1)[1]
-        else:
-            # Keep everything
-            label = profile
             
         ax.plot(range(len(vals)),vals, 'o-', label = label)
         
     ax.legend(loc = 'best')
     
-    if Tmin is not None and Tmax is not None:
-        ax.set_ylim((ymin,ymax))
-    
     if fname is not None:
         plt.savefig(fname, dpi = 100)
         
-def plot_Ts_at_step(i, processed, fname = None, ax = None):
+def plot_Ts_at_step(i, processed, fname = None, ax = None, ssatL = None, ssatV = None, Tsat = None):
     """
     Plot each of the profiles at this given time step index of the interpolated data
     """
@@ -228,40 +255,15 @@ def plot_Ts_at_step(i, processed, fname = None, ax = None):
         fig = plt.figure()
         ax = fig.add_subplot(111)
         
-    p, h, T, rho, s, fluids = [], [], [], [], [], []
-    for k, state in processed.iteritems():
-        if k == 'time': continue
-        p.append(state.p[i])
-        h.append(state.h[i])
-        T.append(state.T[i])
-        rho.append(state.d[i])
-        s.append(state.s[i])
-        fluids.append(state.fluid)
-            
-    if len(set(fluids)) == 1: # all fluids are the same
-        Tsat = np.linspace(CP.Props(fluids[0],'Tmin')+1e-5, CP.Props(fluids[0],'Tcrit')-0.1,200)
-        ssatV = CP.PropsSI('S','T',Tsat,'Q',1,fluids[0])
-        ssatL = CP.PropsSI('S','T',Tsat,'Q',0,fluids[0])
-        ax.plot(ssatV,Tsat,'k')
-        ax.plot(ssatL,Tsat,'k')
+    ax.plot(ssatV, Tsat, 'k')
+    ax.plot(ssatL, Tsat, 'k')        
         
-    ax.plot(s, T, 'o')
+    ax.plot(processed['states'][i]['s'], 
+            processed['states'][i]['T'],
+            'o')
     
     if fname is not None:
         plt.savefig(fname, dpi = 100)
     
 if __name__=='__main__':
-    raw_T_profile, processed_T_profile = find_T_profiles("SQThesisModel.mat", 200)
-    raw_states, processed_states = find_states("SQThesisModel.mat", 200)
-    
-    for i in range(200):
-        plot_Ts_at_step(i, processed_states, 'States{s:05d}.png'.format(s = i))
-        plt.close()
-    subprocess.call('convert States*.png StatesAnimation.gif', shell = True)
-    subprocess.call('erase States*.png', shell = True)
-        
-    for i in range(200):
-        plot_Tprofile_at_step(i, processed_T_profile, 'Tprofile{s:05d}.png'.format(s = i))
-        plt.close()
-    subprocess.call('convert Tprofile*.png TprofileAnimation.gif', shell = True)
-    subprocess.call('erase Tprofile*.png', shell = True)
+    print('I am not meant to be run directly')

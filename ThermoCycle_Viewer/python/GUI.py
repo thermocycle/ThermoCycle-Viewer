@@ -110,10 +110,6 @@ class PlotThread(threading.Thread):
             
             # sleep for interval or until shutdown
             self._finished.wait(self._interval)
-    
-    def task(self):
-        """The task done by this thread - override in subclasses"""
-        raise Exception
 
     def setGUI(self,GUI):
         self._GUI=GUI
@@ -128,12 +124,12 @@ class MainFrame(wx.Frame):
     """
     
     def __init__(self, position = None, size = None):
-        wx.Frame.__init__(self, None, title = "ThermoCycle Viewer", size = (700, 400), style=wx.DEFAULT_FRAME_STYLE|wx.NO_FULL_REPAINT_ON_RESIZE)
+        wx.Frame.__init__(self, None, title = "ThermoCycle Viewer", size = (1024, 768), style=wx.DEFAULT_FRAME_STYLE|wx.NO_FULL_REPAINT_ON_RESIZE)
         
         self.splitter = wx.SplitterWindow(self)
         
         leftpanel = wx.Window(self.splitter, style = wx.BORDER_SUNKEN)
-        self.T_profile_listing = wx.ComboBox(leftpanel)
+        self.T_profile_listing = wx.ComboBox(leftpanel, style = wx.CB_READONLY)
         self.T_profile_plot = PlotPanel(leftpanel)
         
         leftpanelsizer = wx.BoxSizer(wx.VERTICAL)
@@ -146,10 +142,10 @@ class MainFrame(wx.Frame):
         rightpanel = wx.Window(self.splitter, style = wx.BORDER_SUNKEN)
         
         self.state_points_plot = PlotPanel(rightpanel)
-        self.state_plot_chooser = wx.ComboBox(rightpanel)
+        self.state_plot_chooser = wx.ComboBox(rightpanel, style = wx.CB_READONLY)
         self.state_plot_chooser.AppendItems(['Temperature/entropy','Pressure/enthalpy','Pressure/density'])
         self.state_plot_chooser.SetSelection(0)
-        self.state_plot_chooser.Enabled = False
+        self.state_plot_chooser.Editable = False
         rightpanelsizer = wx.BoxSizer(wx.VERTICAL)
         rightpanelsizer.AddSpacer(10)
         rightpanelsizer.Add(self.state_plot_chooser, 0, wx.ALIGN_CENTER_HORIZONTAL)
@@ -157,7 +153,7 @@ class MainFrame(wx.Frame):
         rightpanelsizer.Add(self.state_points_plot, 1, wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
         rightpanel.SetSizer(rightpanelsizer)
         
-        self.splitter.SetMinimumPaneSize(200)
+        self.splitter.SetMinimumPaneSize(500)
         self.splitter.SplitVertically(leftpanel, rightpanel, -100)
         
         self.bottompanel = BottomPanel(self)
@@ -170,6 +166,8 @@ class MainFrame(wx.Frame):
         
         self.bottompanel.step.Bind(wx.EVT_SLIDER, self.OnChangeStep)
         self.bottompanel.play_button.Bind(wx.EVT_TOGGLEBUTTON, self.OnPlay)
+        self.state_plot_chooser.Bind(wx.EVT_COMBOBOX, self.OnChangeStep)
+        self.Bind(wx.EVT_CLOSE, self.OnQuit)
         
         self.make_menu_bar()
         
@@ -178,6 +176,9 @@ class MainFrame(wx.Frame):
         
         # Make a new axis to plot onto
         self.T_profile_plot.ax = self.T_profile_plot.figure.add_subplot(111)
+        
+        # Pop up file loading dialog
+        self.OnLoadMat()
         
     def make_menu_bar(self):
         
@@ -220,6 +221,9 @@ class MainFrame(wx.Frame):
         
         profiles = set([key.rsplit('.',1)[0] for key in keys])
         
+        if 'limits' in profiles:
+            profiles.remove('limits')
+        
         self.T_profile_listing.AppendItems(sorted(profiles))
         self.T_profile_listing.Fit()
         self.T_profile_listing.Refresh()
@@ -228,6 +232,45 @@ class MainFrame(wx.Frame):
         # Start at beginning of simulation
         self.bottompanel.step.SetMax(N)
         self.bottompanel.step.SetValue(1)
+        
+        # Post-processing
+        if len(self.processed_states['fluids']) == 1:
+            fluid = self.processed_states['fluids'][0]
+            # Only one fluid found, we are going to use it
+            self.Tsat = np.linspace(CP.Props(fluid,'Tmin'),CP.Props(fluid,'Tcrit')-0.5,200)
+            self.psatL = CP.PropsSI('P','T',self.Tsat,'Q',0,fluid)
+            self.psatV = CP.PropsSI('P','T',self.Tsat,'Q',1,fluid)
+            self.ssatL = CP.PropsSI('S','T',self.Tsat,'Q',0,fluid)
+            self.ssatV = CP.PropsSI('S','T',self.Tsat,'Q',1,fluid)
+            self.hsatL = CP.PropsSI('H','T',self.Tsat,'Q',0,fluid)
+            self.hsatV = CP.PropsSI('H','T',self.Tsat,'Q',1,fluid)
+            self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',0,fluid)
+            self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,fluid)
+        else:
+            dlg = wx.MessageDialog(None,"More than one fluid found {fluids:s}, no saturation curves will be plotted".format(fluids =str(self.processed_states['fluids'])))
+            dlg.ShowModal()
+            dlg.Destroy()
+            self.Tsat = None
+            self.psatL = None
+            self.psatV = None
+            self.ssatL = None
+            self.ssatV = None
+            self.hsatL = None
+            self.hsatV = None
+            self.rhosatL = None
+            self.rhosatV = None
+            
+        # Build a dictionary mapping from processed key root name to tuple of (full profile name, label)
+        self.Tprofile_key_map = {}
+        for key in sorted(self.processed_T_profile.keys()):
+            if key in ['time','limits']: 
+                continue
+            root_name,label = key.rsplit('.',1)
+            if root_name in self.Tprofile_key_map:
+                self.Tprofile_key_map[root_name].append((key,label))
+            else:
+                self.Tprofile_key_map[root_name] = [(key,label)]       
+            
         # Force a refresh
         self.OnChangeStep()
         
@@ -263,37 +306,88 @@ class MainFrame(wx.Frame):
         
         # --------------- State points ----------------------
         
+        ax = self.state_points_plot.ax
+        
         # Clear the axis
-        self.state_points_plot.ax.cla()
+        ax.cla()
         
-        # Plot the state points on T-s coordinates
-        plot_Ts_at_step(i-1,self.processed_states, ax = self.state_points_plot.ax)
-        
+        Type = self.state_plot_chooser.GetStringSelection()
+        if Type == 'Temperature/entropy':
+            # Plot saturation curves
+            ax.plot(self.ssatV, self.Tsat, 'k')
+            ax.plot(self.ssatL, self.Tsat, 'k')        
+            
+            ax.plot(self.processed_states['states'][i]['s'], 
+                    self.processed_states['states'][i]['T'], 'o')
+            ax.set_xlabel('Entropy $s$ [J/kg/K]')
+            ax.set_ylabel('Temperature $T$ [K]')
+            ax.set_xlim(self.processed_states['limits']['smin'],
+                        self.processed_states['limits']['smax'])
+            ax.set_ylim(self.processed_states['limits']['Tmin'],
+                        self.processed_states['limits']['Tmax'])
+                    
+        elif Type == 'Pressure/enthalpy':
+            # Plot saturation curves
+            ax.plot(self.hsatV, self.psatV, 'k')
+            ax.plot(self.hsatL, self.psatL, 'k')        
+            
+            ax.plot(self.processed_states['states'][i]['h'], 
+                    self.processed_states['states'][i]['p'], 'o')
+            ax.set_xlabel('Enthalpy $h$ [J/kg]')
+            ax.set_ylabel('Pressure $p$ [Pa]')
+            ax.set_xlim(self.processed_states['limits']['hmin'],
+                        self.processed_states['limits']['hmax'])
+            ax.set_ylim(self.processed_states['limits']['pmin'],
+                        self.processed_states['limits']['pmax'])
+                    
+        elif Type == 'Pressure/density':
+            # Plot saturation curves
+            ax.plot(self.rhosatV, self.psatV, 'k')
+            ax.plot(self.rhosatL, self.psatL, 'k')        
+            
+            ax.plot(self.processed_states['states'][i]['rho'], 
+                    self.processed_states['states'][i]['p'], 'o')
+            ax.set_xlabel(r'Density $\rho$ [kg/m$^3$]')
+            ax.set_ylabel('Pressure $p$ [Pa]')
+            ax.set_xlim(self.processed_states['limits']['rhomin'],
+                        self.processed_states['limits']['rhomax'])
+            ax.set_ylim(self.processed_states['limits']['pmin'],
+                        self.processed_states['limits']['pmax'])
+                    
         # Force a redraw
         self.state_points_plot.canvas.draw()
 
         # -------------- T profiles -----------------------
         
+        ax = self.T_profile_plot.ax
+        
         # Clear the figure
-        self.T_profile_plot.ax.cla()
+        ax.cla()
         
-        # Get the profile that is selected
-        profile = self.T_profile_listing.GetStringSelection()
+        # Get the component that is selected
+        component = self.T_profile_listing.GetStringSelection()
         
-        # Plot the profiles
-        plot_Tprofile_at_step(i-1,
-                              self.processed_T_profile, 
-                              ax = self.T_profile_plot.ax,
-                              root = profile,
-                              Tmin = self.Tmin_T_profile,
-                              Tmax = self.Tmax_T_profile
-                              )
+        # Get the limits over the entire time for all profiles being plotted
+        ymax = max([self.processed_T_profile['limits']['Tmax'][key] for key,label in self.Tprofile_key_map[component]])
+        ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
         
+        # Iterate over the profiles to be plotted
+        for key,label in self.Tprofile_key_map[component]:
+             
+            vals = [el[i] for el in self.processed_T_profile[key]]
+            
+            ax.plot(range(len(vals)), vals, 'o-', label = label)
+            
+        ax.legend(loc = 'best')        
         
+        # Set axis limits
+        ax.set_ylim(ymin, ymax)
+        
+        ax.set_xlabel('Node index')
+        ax.set_ylabel('Temperature $T$ [K]')
         
         # Force a redraw
         self.T_profile_plot.canvas.draw()
-        
         
     def OnLoadMat(self, event = None):
         FD = wx.FileDialog(None,
@@ -345,19 +439,18 @@ class MainFrame(wx.Frame):
         wx.AboutBox(info)
     
     def OnQuit(self, event):
-        self.Destroy()
-        wx.Exit()
         
-#     def OnPlay(self, event):
-#         
-
+        if hasattr(self,'PT'):
+            self.PT.shutdown()
+            
+        self.Destroy()
         
     def OnPlay(self, event):
         """
         Starts the plotting thread
         """
         btn = event.GetEventObject()
-        if btn.GetValue()==True:
+        if btn.GetValue() == True:
             btn.SetLabel("Stop Animation")
             
             # Start the plotting machinery
