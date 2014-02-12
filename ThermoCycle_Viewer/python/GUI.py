@@ -468,9 +468,6 @@ if __name__ == '__main__':
     # after if __name__ == '__main__':
     freeze_support()
     
-    # This line is to make wxpython 3.0 happy on windows XP
-    wx.Log.SetLogLevel(0)
-    
     app = wx.App(False)
     
     if '--nosplash' not in sys.argv:
