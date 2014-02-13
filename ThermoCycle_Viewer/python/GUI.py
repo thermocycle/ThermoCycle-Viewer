@@ -238,7 +238,8 @@ class MainFrame(wx.Frame):
         if len(self.processed_states['fluids']) == 1:
             fluid = self.processed_states['fluids'][0]
             # Only one fluid found, we are going to use it
-            self.Tsat = np.linspace(CP.Props(fluid,'Tmin'),CP.Props(fluid,'Tcrit')-0.5,200)
+            
+            self.Tsat = np.append(np.linspace(CP.Props(fluid,'Tmin'),CP.Props(fluid,'Tcrit')-0.5,200),np.linspace(CP.Props(fluid,'Tcrit')-0.5,CP.Props(fluid,'Tcrit')-0.005,50))
             self.psatL = CP.PropsSI('P','T',self.Tsat,'Q',0,fluid)
             self.psatV = CP.PropsSI('P','T',self.Tsat,'Q',1,fluid)
             self.ssatL = CP.PropsSI('S','T',self.Tsat,'Q',0,fluid)
@@ -247,6 +248,7 @@ class MainFrame(wx.Frame):
             self.hsatV = CP.PropsSI('H','T',self.Tsat,'Q',1,fluid)
             self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',0,fluid)
             self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,fluid)
+            self.fluid = fluid
         else:
             dlg = wx.MessageDialog(None,"More than one fluid found {fluids:s}, no saturation curves will be plotted".format(fluids =str(self.processed_states['fluids'])))
             dlg.ShowModal()
@@ -286,7 +288,7 @@ class MainFrame(wx.Frame):
         # Get the total number of steps
         N = self.bottompanel.step.GetMax()
         
-        # Use mod operator to avoid overflow
+        # Use mod operator to avoid overflow (N+1)%N = 1
         i_new = (i+1)%N
         
         # Set the value
@@ -301,6 +303,10 @@ class MainFrame(wx.Frame):
         self.OnChangeStep()
         
     def OnBackgroundPlot(self, event = None):
+        '''
+        Plot the background elements that do not need to be updated in the
+        plotting thread
+        '''
         
         ax = self.state_points_plot.ax
         
@@ -316,10 +322,15 @@ class MainFrame(wx.Frame):
                                self.processed_states['states'][0]['T'], 'o')
             ax.set_xlabel('Entropy $s$ [J/kg/K]')
             ax.set_ylabel('Temperature $T$ [K]')
-            ax.set_xlim(self.processed_states['limits']['smin'],
-                        self.processed_states['limits']['smax'])
-            ax.set_ylim(self.processed_states['limits']['Tmin'],
-                        self.processed_states['limits']['Tmax'])
+            
+            smin,smax = (self.processed_states['limits']['smin'],
+                         self.processed_states['limits']['smax'])
+            Tmin,Tmax = (self.processed_states['limits']['Tmin'],
+                         self.processed_states['limits']['Tmax'])
+            
+            Tmax = max(CP.Props(self.fluid,'Tcrit')+1,Tmax)
+            ax.set_xlim(smin-(smax-smin)*0.2,smax + (smax-smin)*0.2)
+            ax.set_ylim(Tmin-5,Tmax)
                     
         elif Type == 'Pressure/enthalpy':
             # Plot saturation curves
@@ -330,10 +341,16 @@ class MainFrame(wx.Frame):
                                self.processed_states['states'][0]['p'], 'o')
             ax.set_xlabel('Enthalpy $h$ [J/kg]')
             ax.set_ylabel('Pressure $p$ [Pa]')
-            ax.set_xlim(self.processed_states['limits']['hmin'],
-                        self.processed_states['limits']['hmax'])
-            ax.set_ylim(self.processed_states['limits']['pmin'],
-                        self.processed_states['limits']['pmax'])
+            hmin,hmax = (self.processed_states['limits']['hmin'],
+                         self.processed_states['limits']['hmax'])
+            pmin,pmax = (self.processed_states['limits']['pmin'],
+                         self.processed_states['limits']['pmax'])
+            
+            pmin,pmax = max(pmin-0.05*(pmax-pmin),0),max(CP.PropsSI(self.fluid,'pcrit')*1.05,pmax)
+
+            ax.set_xlim(hmin-(hmax-hmin)*0.2, hmax + (hmax-hmin)*0.2)
+            ax.set_ylim(pmin, pmax)
+            ax.set_yscale('log')
                     
         elif Type == 'Pressure/density':
             # Plot saturation curves
@@ -346,8 +363,13 @@ class MainFrame(wx.Frame):
             ax.set_ylabel('Pressure $p$ [Pa]')
             ax.set_xlim(self.processed_states['limits']['rhomin'],
                         self.processed_states['limits']['rhomax'])
-            ax.set_ylim(self.processed_states['limits']['pmin'],
+                        
+            pmin,pmax = (self.processed_states['limits']['pmin'],
                         self.processed_states['limits']['pmax'])
+            
+            pmin,pmax = max(pmin-0.05*(pmax-pmin),0),max(CP.PropsSI(self.fluid,'pcrit')*1.05,pmax)
+            ax.set_ylim(pmin, pmax)
+            ax.set_yscale('log')
                         
         
         ax = self.T_profile_plot.ax
@@ -376,7 +398,7 @@ class MainFrame(wx.Frame):
         ax.legend(loc = 'best')        
         
         # Set axis limits
-        ax.set_ylim(ymin, ymax)
+        ax.set_ylim(ymin-5, ymax+5)
         
         ax.set_xlabel('Node index')
         ax.set_ylabel('Temperature $T$ [K]')
@@ -385,7 +407,6 @@ class MainFrame(wx.Frame):
         """
         Change which values are going to be plotted
         """
-        
         
         # Get the slider value
         i = self.bottompanel.step.GetValue()
@@ -510,7 +531,9 @@ class MainFrame(wx.Frame):
         else:
             btn.SetLabel("Start Animation")
             
-        
+            if hasattr(self,'PT'):
+                self.PT.shutdown()
+                del self.PT
                           
 if __name__ == '__main__':
     # The following line is required to allow cx_Freeze 
