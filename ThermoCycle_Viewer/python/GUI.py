@@ -105,6 +105,7 @@ class PlotThread(threading.Thread):
     def run(self):
         while 1:
             if self._finished.isSet(): return
+            
             self.task()
             
             # sleep for interval or until shutdown
@@ -115,7 +116,7 @@ class PlotThread(threading.Thread):
 
     def task(self):
         if self._GUI.bottompanel.play_button.GetValue() == True:
-            wx.CallAfter(self._GUI.plot_step)
+            self._GUI.plot_step()
                 
 class MainFrame(wx.Frame):
     """
@@ -165,7 +166,8 @@ class MainFrame(wx.Frame):
         
         self.bottompanel.step.Bind(wx.EVT_SLIDER, self.OnChangeStep)
         self.bottompanel.play_button.Bind(wx.EVT_TOGGLEBUTTON, self.OnPlay)
-        self.state_plot_chooser.Bind(wx.EVT_COMBOBOX, self.OnChangeStep)
+        self.state_plot_chooser.Bind(wx.EVT_COMBOBOX, self.OnRefresh)
+        self.T_profile_listing.Bind(wx.EVT_COMBOBOX, self.OnRefresh)
         self.Bind(wx.EVT_CLOSE, self.OnQuit)
         
         self.make_menu_bar()
@@ -269,7 +271,10 @@ class MainFrame(wx.Frame):
                 self.Tprofile_key_map[root_name].append((key,label))
             else:
                 self.Tprofile_key_map[root_name] = [(key,label)]       
-            
+        
+        # Do the base plotting    
+        self.OnBackgroundPlot()
+        
         # Force a refresh
         self.OnChangeStep()
         
@@ -290,24 +295,15 @@ class MainFrame(wx.Frame):
         # Re-plot
         self.OnChangeStep()
         
-    def OnChangeStep(self, event = None):
-        """
-        Change which values are going to be plotted
-        """
+    def OnRefresh(self, event = None):
         
-        # Get the slider value
-        i = self.bottompanel.step.GetValue()
+        self.OnBackgroundPlot()
+        self.OnChangeStep()
         
-        # ---------------- time ------------------
-        
-        #Update the text version of the time
-        self.bottompanel.timetext.SetValue(str(self.processed_states['time'][i-1]))
-        
-        # --------------- State points ----------------------
+    def OnBackgroundPlot(self, event = None):
         
         ax = self.state_points_plot.ax
         
-        # Clear the axis
         ax.cla()
         
         Type = self.state_plot_chooser.GetStringSelection()
@@ -316,8 +312,8 @@ class MainFrame(wx.Frame):
             ax.plot(self.ssatV, self.Tsat, 'k')
             ax.plot(self.ssatL, self.Tsat, 'k')        
             
-            ax.plot(self.processed_states['states'][i]['s'], 
-                    self.processed_states['states'][i]['T'], 'o')
+            ax.data, = ax.plot(self.processed_states['states'][0]['s'], 
+                               self.processed_states['states'][0]['T'], 'o')
             ax.set_xlabel('Entropy $s$ [J/kg/K]')
             ax.set_ylabel('Temperature $T$ [K]')
             ax.set_xlim(self.processed_states['limits']['smin'],
@@ -330,8 +326,8 @@ class MainFrame(wx.Frame):
             ax.plot(self.hsatV, self.psatV, 'k')
             ax.plot(self.hsatL, self.psatL, 'k')        
             
-            ax.plot(self.processed_states['states'][i]['h'], 
-                    self.processed_states['states'][i]['p'], 'o')
+            ax.data, = ax.plot(self.processed_states['states'][0]['h'], 
+                               self.processed_states['states'][0]['p'], 'o')
             ax.set_xlabel('Enthalpy $h$ [J/kg]')
             ax.set_ylabel('Pressure $p$ [Pa]')
             ax.set_xlim(self.processed_states['limits']['hmin'],
@@ -344,23 +340,18 @@ class MainFrame(wx.Frame):
             ax.plot(self.rhosatV, self.psatV, 'k')
             ax.plot(self.rhosatL, self.psatL, 'k')        
             
-            ax.plot(self.processed_states['states'][i]['rho'], 
-                    self.processed_states['states'][i]['p'], 'o')
+            ax.data, = ax.plot(self.processed_states['states'][0]['rho'], 
+                               self.processed_states['states'][0]['p'], 'o')
             ax.set_xlabel(r'Density $\rho$ [kg/m$^3$]')
             ax.set_ylabel('Pressure $p$ [Pa]')
             ax.set_xlim(self.processed_states['limits']['rhomin'],
                         self.processed_states['limits']['rhomax'])
             ax.set_ylim(self.processed_states['limits']['pmin'],
                         self.processed_states['limits']['pmax'])
-                    
-        # Force a redraw
-        self.state_points_plot.canvas.draw()
-
-        # -------------- T profiles -----------------------
+                        
         
         ax = self.T_profile_plot.ax
         
-        # Clear the figure
         ax.cla()
         
         # Get the component that is selected
@@ -371,11 +362,16 @@ class MainFrame(wx.Frame):
         ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
         
         # Iterate over the profiles to be plotted
+        lines = []
         for key,label in self.Tprofile_key_map[component]:
              
-            vals = [el[i] for el in self.processed_T_profile[key]]
+            vals = [el[0] for el in self.processed_T_profile[key]]
             
-            ax.plot(range(len(vals)), vals, 'o-', label = label)
+            line, = ax.plot(range(len(vals)), vals, 'o-', label = label)
+            
+            lines.append(line)
+        
+        ax.data = lines
             
         ax.legend(loc = 'best')        
         
@@ -385,8 +381,60 @@ class MainFrame(wx.Frame):
         ax.set_xlabel('Node index')
         ax.set_ylabel('Temperature $T$ [K]')
         
+    def OnChangeStep(self, event = None):
+        """
+        Change which values are going to be plotted
+        """
+        
+        
+        # Get the slider value
+        i = self.bottompanel.step.GetValue()
+        
+        # ---------------- time ------------------
+        
+        # Update the text version of the time
+        self.bottompanel.timetext.SetValue(str(self.processed_states['time'][i-1]))
+        
+        # --------------- State points ----------------------
+        
+        ax = self.state_points_plot.ax
+        
+        Type = self.state_plot_chooser.GetStringSelection()
+        
+        if Type == 'Temperature/entropy':            
+            x,y = self.processed_states['states'][i]['s'],self.processed_states['states'][i]['T']
+        elif Type == 'Pressure/enthalpy':            
+            x,y = self.processed_states['states'][i]['h'],self.processed_states['states'][i]['p']
+        elif Type == 'Pressure/density':
+            x,y = self.processed_states['states'][i]['rho'],self.processed_states['states'][i]['p']
+            
+        # Set the data
+        ax.data.set_data(x,y)
+        
+        # Force a redraw
+        self.state_points_plot.canvas.draw()
+
+        # -------------- T profiles -----------------------
+        
+        # Get the axis
+        ax = self.T_profile_plot.ax
+        
+        # Get the component that is selected
+        component = self.T_profile_listing.GetStringSelection()
+        
+        # Iterate over the profiles to be plotted
+        for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
+             
+            # Get the temperatures for the profile
+            vals = [el[i] for el in self.processed_T_profile[key]]
+            
+            # Set the data for the profile
+            ax.data[j].set_data(range(len(vals)), vals)
+        
         # Force a redraw
         self.T_profile_plot.canvas.draw()
+        
+        wx.YieldIfNeeded()
         
     def OnLoadMat(self, event = None):
         FD = wx.FileDialog(None,
@@ -429,10 +477,11 @@ class MainFrame(wx.Frame):
         info.Copyright = "(C) 2014 Ian Bell, Sylvain Quoilin, Adriano Desideri, Vincent Lemort"
         info.Description = wordwrap(
             "A graphical user interface viewer for results from Thermocycle\n\n"+
+            "wx version: " +wx.__version__+'\n'
             "scipy version: " +scipy.__version__+'\n'
             "CoolProp version: "+CoolProp.__version__,
             350, wx.ClientDC(self))
-        info.WebSite = ("https://github.com/thermocycle", "Thermocycle home page")
+        info.WebSite = ("http://www.thermocycle.net/", "Thermocycle home page")
 
         # Then we call wx.AboutBox giving it that info object
         wx.AboutBox(info)
@@ -441,7 +490,7 @@ class MainFrame(wx.Frame):
         
         if hasattr(self,'PT'):
             self.PT.shutdown()
-            
+         
         self.Destroy()
         
     def OnPlay(self, event):
@@ -456,11 +505,12 @@ class MainFrame(wx.Frame):
             self.PT=PlotThread()
             self.PT.setDaemon(True)
             self.PT.setGUI(self) #pass it an instance of the frame (by reference)
-            self.PT.setInterval(0.0) #delay between plot events
+            self.PT.setInterval(0.01) #delay between plot events in s
             self.PT.start()
-        
         else:
             btn.SetLabel("Start Animation")
+            
+        
                           
 if __name__ == '__main__':
     # The following line is required to allow cx_Freeze 
