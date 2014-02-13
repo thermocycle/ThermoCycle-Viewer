@@ -489,13 +489,27 @@ class MainFrame(wx.Frame):
         wx.YieldIfNeeded()
         
     def OnLoadMat(self, event = None):
+        
+        # Get last folder that was used
+        
+        defaultDir = '.'
+        if os.path.exists('last_directory'):
+            directory = open('last_directory').read().strip()
+            if os.path.exists(directory):
+                defaultDir = directory
+        
         FD = wx.FileDialog(None,
                            "Load MAT file",
-                           defaultDir = '.',
+                           defaultDir = defaultDir,
                            wildcard = 'Modelica output file (*.mat)|*.mat',
                            style = wx.FD_OPEN|wx.FD_FILE_MUST_EXIST)
         
         if wx.ID_OK == FD.ShowModal():
+            root,file = os.path.split(FD.GetPath())
+            f = open('last_directory','w')
+            print >> f, root
+            f.close()
+            
             isok = False
             while isok == False:
                 file_path = FD.GetPath()
