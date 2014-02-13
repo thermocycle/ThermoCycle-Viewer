@@ -23,6 +23,10 @@ def find_T_profiles(filename, Ninterp):
 
     # Find names that have a T_profile in them
     T_profile_names = find_matches(names, 'T_profile')
+    
+    # No temperature profiles
+    if not T_profile_names:
+        return None,None,None,None
 
     raw = {}
 

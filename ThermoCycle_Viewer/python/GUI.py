@@ -216,20 +216,42 @@ class MainFrame(wx.Frame):
         """
         
         raw_T_profile, self.processed_T_profile, self.Tmin_T_profile, self.Tmax_T_profile = find_T_profiles(mat, N)
+        if raw_T_profile is None and self.processed_T_profile is None:
+            dlg = wx.MessageDialog(None,"No temperature profiles were found")
+            dlg.ShowModal()
+            dlg.Destroy()
+            self.T_profile_listing.Clear()
+            self.T_profile_listing.AppendItems(['No Profiles'])
+            self.T_profile_listing.Fit()
+            self.T_profile_listing.Refresh()
+            self.T_profile_listing.SetSelection(0)
+        else:
+            keys = self.processed_T_profile.keys()
+            keys.remove('time')
+        
+            profiles = set([key.rsplit('.',1)[0] for key in keys])
+        
+            if 'limits' in profiles:
+                profiles.remove('limits')
+        
+            self.T_profile_listing.Clear()
+            self.T_profile_listing.AppendItems(sorted(profiles))
+            self.T_profile_listing.Fit()
+            self.T_profile_listing.Refresh()
+            self.T_profile_listing.SetSelection(0)
+            
+            # Build a dictionary mapping from processed key root name to tuple of (full profile name, label)
+            self.Tprofile_key_map = {}
+            for key in sorted(self.processed_T_profile.keys()):
+                if key in ['time','limits']: 
+                    continue
+                root_name,label = key.rsplit('.',1)
+                if root_name in self.Tprofile_key_map:
+                    self.Tprofile_key_map[root_name].append((key,label))
+                else:
+                    self.Tprofile_key_map[root_name] = [(key,label)]       
+            
         raw_states, self.processed_states = find_states(mat, N)
-        keys = self.processed_T_profile.keys()
-        keys.remove('time')
-        
-        profiles = set([key.rsplit('.',1)[0] for key in keys])
-        
-        if 'limits' in profiles:
-            profiles.remove('limits')
-        
-        self.T_profile_listing.Clear()
-        self.T_profile_listing.AppendItems(sorted(profiles))
-        self.T_profile_listing.Fit()
-        self.T_profile_listing.Refresh()
-        self.T_profile_listing.SetSelection(0)
         
         # Start at beginning of simulation
         self.bottompanel.step.SetMax(N)
@@ -250,6 +272,8 @@ class MainFrame(wx.Frame):
             self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',0,fluid)
             self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,fluid)
             self.fluid = fluid
+            
+            print self.fluid
         else:
             dlg = wx.MessageDialog(None,"More than one fluid found {fluids:s}, no saturation curves will be plotted".format(fluids =str(self.processed_states['fluids'])))
             dlg.ShowModal()
@@ -263,17 +287,6 @@ class MainFrame(wx.Frame):
             self.hsatV = None
             self.rhosatL = None
             self.rhosatV = None
-            
-        # Build a dictionary mapping from processed key root name to tuple of (full profile name, label)
-        self.Tprofile_key_map = {}
-        for key in sorted(self.processed_T_profile.keys()):
-            if key in ['time','limits']: 
-                continue
-            root_name,label = key.rsplit('.',1)
-            if root_name in self.Tprofile_key_map:
-                self.Tprofile_key_map[root_name].append((key,label))
-            else:
-                self.Tprofile_key_map[root_name] = [(key,label)]       
         
         # Do the base plotting    
         self.OnBackgroundPlot()
@@ -376,37 +389,38 @@ class MainFrame(wx.Frame):
             ax.set_ylim(pmin, pmax)
             ax.set_yscale('log')
         
-        ax = self.T_profile_plot.ax
-        
-        ax.cla()
-        
-        # Get the component that is selected
-        component = self.T_profile_listing.GetStringSelection()
-        
-        # Get the limits over the entire time for all profiles being plotted
-        ymax = max([self.processed_T_profile['limits']['Tmax'][key] for key,label in self.Tprofile_key_map[component]])
-        ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
-        
-        # Iterate over the profiles to be plotted
-        lines = []
-        for key,label in self.Tprofile_key_map[component]:
-             
-            vals = [el[0] for el in self.processed_T_profile[key]]
+        if self.processed_T_profile is not None:
+            ax = self.T_profile_plot.ax
             
-            line, = ax.plot(range(len(vals)), vals, 'o-', label = label)
+            ax.cla()
             
-            lines.append(line)
-        
-        ax.data = lines
+            # Get the component that is selected
+            component = self.T_profile_listing.GetStringSelection()
             
-        ax.legend(loc = 'best')        
-        
-        # Set axis limits
-        ax.set_ylim(ymin-5, ymax+5)
-        
-        ax.set_xlabel('Node index')
-        ax.set_ylabel('Temperature $T$ [K]')
-        
+            # Get the limits over the entire time for all profiles being plotted
+            ymax = max([self.processed_T_profile['limits']['Tmax'][key] for key,label in self.Tprofile_key_map[component]])
+            ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
+            
+            # Iterate over the profiles to be plotted
+            lines = []
+            for key,label in self.Tprofile_key_map[component]:
+                
+                vals = [el[0] for el in self.processed_T_profile[key]]
+                
+                line, = ax.plot(range(len(vals)), vals, 'o-', label = label)
+                
+                lines.append(line)
+            
+            ax.data = lines
+                
+            ax.legend(loc = 'best')        
+            
+            # Set axis limits
+            ax.set_ylim(ymin-5, ymax+5)
+            
+            ax.set_xlabel('Node index')
+            ax.set_ylabel('Temperature $T$ [K]')
+            
     def OnChangeStep(self, event = None):
         """
         Change which values are going to be plotted
@@ -441,23 +455,25 @@ class MainFrame(wx.Frame):
 
         # -------------- T profiles -----------------------
         
-        # Get the axis
-        ax = self.T_profile_plot.ax
-        
-        # Get the component that is selected
-        component = self.T_profile_listing.GetStringSelection()
-        
-        # Iterate over the profiles to be plotted
-        for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
-             
-            # Get the temperatures for the profile
-            vals = [el[i] for el in self.processed_T_profile[key]]
+        if self.processed_T_profile is not None:
             
-            # Set the data for the profile
-            ax.data[j].set_data(range(len(vals)), vals)
-        
-        # Force a redraw
-        self.T_profile_plot.canvas.draw()
+            # Get the axis
+            ax = self.T_profile_plot.ax
+            
+            # Get the component that is selected
+            component = self.T_profile_listing.GetStringSelection()
+            
+            # Iterate over the profiles to be plotted
+            for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
+                
+                # Get the temperatures for the profile
+                vals = [el[i] for el in self.processed_T_profile[key]]
+                
+                # Set the data for the profile
+                ax.data[j].set_data(range(len(vals)), vals)
+            
+            # Force a redraw
+            self.T_profile_plot.canvas.draw()
         
         wx.YieldIfNeeded()
         
@@ -491,17 +507,12 @@ class MainFrame(wx.Frame):
         
     def OnAbout(self, event = None):
         
-        if "unicode" in wx.PlatformInfo:
-            wx_unicode = '\nwx Unicode support: True\n'
-        else:
-            wx_unicode = '\nwx Unicode support: False\n'
-        
         import CoolProp
         info = wx.AboutDialogInfo()
         info.Name = "ThermoCycle Viewer"
         info.Copyright = "(C) 2014 Ian Bell, Sylvain Quoilin, Adriano Desideri, Vincent Lemort"
         info.Description = wordwrap(
-            "A graphical user interface viewer for results from Thermocycle\n\n"+
+            "A fully-open-source viewer for results from Thermocycle\n\n"+
             "wx version: " +wx.__version__+'\n'
             "scipy version: " +scipy.__version__+'\n'
             "CoolProp version: "+CoolProp.__version__,
