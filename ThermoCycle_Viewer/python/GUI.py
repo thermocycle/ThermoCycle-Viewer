@@ -273,20 +273,31 @@ class MainFrame(wx.Frame):
             self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,fluid)
             self.fluid = fluid
             
-            print self.fluid
         else:
-            dlg = wx.MessageDialog(None,"More than one fluid found {fluids:s}, no saturation curves will be plotted".format(fluids =str(self.processed_states['fluids'])))
-            dlg.ShowModal()
+            
+            message = "More than one fluid found {fluids:s}, please select fluid".format(fluids =str(self.processed_states['fluids']))
+            
+            dlg = wx.SingleChoiceDialog(
+                self, message, 'The Caption',
+                sorted(CoolProp.__fluids__), 
+                wx.CHOICEDLG_STYLE
+                )
+            if dlg.ShowModal() == wx.ID_OK:
+                self.fluid = str(dlg.GetStringSelection())
+            else:
+                self.fluid = None
+    
             dlg.Destroy()
-            self.Tsat = None
-            self.psatL = None
-            self.psatV = None
-            self.ssatL = None
-            self.ssatV = None
-            self.hsatL = None
-            self.hsatV = None
-            self.rhosatL = None
-            self.rhosatV = None
+                
+            self.Tsat = np.append(np.linspace(CP.Props(self.fluid,'Tmin'),CP.Props(self.fluid,'Tcrit')-0.5,200),np.linspace(CP.Props(self.fluid,'Tcrit')-0.5,CP.Props(self.fluid,'Tcrit')-0.1,50))
+            self.psatL = CP.PropsSI('P','T',self.Tsat,'Q',0,self.fluid)
+            self.psatV = CP.PropsSI('P','T',self.Tsat,'Q',1,self.fluid)
+            self.ssatL = CP.PropsSI('S','T',self.Tsat,'Q',0,self.fluid)
+            self.ssatV = CP.PropsSI('S','T',self.Tsat,'Q',1,self.fluid)
+            self.hsatL = CP.PropsSI('H','T',self.Tsat,'Q',0,self.fluid)
+            self.hsatV = CP.PropsSI('H','T',self.Tsat,'Q',1,self.fluid)
+            self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',0,self.fluid)
+            self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,self.fluid)
         
         # Do the base plotting    
         self.OnBackgroundPlot()
