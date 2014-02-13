@@ -30,7 +30,9 @@ path = []
 
 import glob,os
 
-include_files += ['logo_thermocycle.png','SQThesisModel.mat']
+include_files += ['logo_thermocycle.png',
+                  'logo_thermocycle.ico',
+                  'SQThesisModel.mat']
 
 # The setup for cx_Freeze is different from py2exe. Here I am going to
 # use the Python class Executable from cx_Freeze
@@ -50,7 +52,7 @@ GUI2Exe_Target_1 = Executable(
     copyDependentFiles = False,
     appendScriptToExe = False,
     appendScriptToLibrary = False,
-    icon = None
+    icon = 'logo_thermocycle.ico'
     )
 
 
