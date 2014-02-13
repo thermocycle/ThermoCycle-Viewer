@@ -60,9 +60,12 @@ GUI2Exe_Target_1 = Executable(
 # supports. I put them all even if some of them are usually defaulted
 # and not used. Some of them I didn't even know about.
 
+import GUI
+version = GUI.version
+
 setup(
     
-    version = "0.0",
+    version = version,
     description = "No Description",
     author = "No Author",
     name = "cx_Freeze Sample File",

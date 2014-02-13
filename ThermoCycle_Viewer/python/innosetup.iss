@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "ThermoCycleViewer"
-#define MyAppVersion "0.0"
+#define MyAppVersion GetFileVersion("ThermoCycleViewer\ThermoCycleViewer.exe")
 #define MyAppPublisher "Laboratory of Thermodynamics, University of Liege"
 #define MyAppURL "http://www.thermocycle.net/"
 #define MyAppExeName "ThermoCycleViewer.exe"

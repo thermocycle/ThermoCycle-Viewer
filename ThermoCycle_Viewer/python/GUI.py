@@ -12,6 +12,8 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 from matplotlib.backends.backend_wxagg import NavigationToolbar2Wx as Toolbar        
 import threading
 
+version = "1.0"
+
 class SplashScreen(wx.SplashScreen):
     """
     Create a splash screen widget.
@@ -534,7 +536,7 @@ class MainFrame(wx.Frame):
         
         import CoolProp
         info = wx.AboutDialogInfo()
-        info.Name = "ThermoCycle Viewer"
+        info.Name = "ThermoCycleViewer v. " + version
         info.Copyright = "(C) 2014 Ian Bell, Sylvain Quoilin, Adriano Desideri, Vincent Lemort"
         info.Description = wordwrap(
             "A fully-open-source viewer for results from Thermocycle\n\n"+
