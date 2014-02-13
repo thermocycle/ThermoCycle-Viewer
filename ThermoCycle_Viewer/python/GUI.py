@@ -225,6 +225,7 @@ class MainFrame(wx.Frame):
         if 'limits' in profiles:
             profiles.remove('limits')
         
+        self.T_profile_listing.Clear()
         self.T_profile_listing.AppendItems(sorted(profiles))
         self.T_profile_listing.Fit()
         self.T_profile_listing.Refresh()
