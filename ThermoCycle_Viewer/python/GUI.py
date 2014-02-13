@@ -494,7 +494,7 @@ class MainFrame(wx.Frame):
         
         defaultDir = '.'
         if os.path.exists('last_directory'):
-            directory = open('last_directory').read().strip()
+            directory = open('last_directory','r').read().strip()
             if os.path.exists(directory):
                 defaultDir = directory
         
