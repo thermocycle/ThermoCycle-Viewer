@@ -175,6 +175,8 @@ def find_states(filename, Ninterp):
         # processed
         for k,val in processed[state].__dict__.iteritems():
             if k in ['fluid', 'fluid_diff']: continue
+            if time_old.shape != val.shape and val.shape == (2,) and val[0] == val[1]:
+                val = val[0]*np.ones_like(time_old)
             val_new = scipy.interpolate.interp1d(time_old, val)(time_interp)
             setattr(processed[state], k, val_new)
     
