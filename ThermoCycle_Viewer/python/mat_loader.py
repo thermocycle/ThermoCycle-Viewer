@@ -141,6 +141,10 @@ def find_states(filename, Ninterp):
     # Start with empty dictionary for the states
     raw = {}
     
+    # No temperature profiles
+    if not keys:
+        return None,None
+    
     for key in keys:
         
         s = struct()

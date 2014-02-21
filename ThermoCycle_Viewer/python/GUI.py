@@ -14,6 +14,9 @@ import threading
 
 version = "1.0"
 
+# The path to the home folder for the user
+home_folder = os.getenv('USERPROFILE') or os.getenv('HOME')
+
 class SplashScreen(wx.SplashScreen):
     """
     Create a splash screen widget.
@@ -254,13 +257,31 @@ class MainFrame(wx.Frame):
                     self.Tprofile_key_map[root_name] = [(key,label)]       
             
         raw_states, self.processed_states = find_states(mat, N)
+        if raw_states is None and self.processed_states is None:
+            dlg = wx.MessageDialog(None,"No states were found")
+            dlg.ShowModal()
+            dlg.Destroy()
+        
+        raw_states
         
         # Start at beginning of simulation
         self.bottompanel.step.SetMax(N)
         self.bottompanel.step.SetValue(1)
         
         # Post-processing
-        if len(self.processed_states['fluids']) == 1:
+        if raw_states is None and self.processed_states is None:
+            self.Tsat = None
+            self.psatL = None
+            self.psatV = None
+            self.ssatL = None
+            self.ssatV = None
+            self.hsatL = None
+            self.hsatV = None
+            self.rhosatL = None
+            self.rhosatV = None
+            self.fluid = None
+            
+        elif len(self.processed_states['fluids']) == 1:
             fluid = self.processed_states['fluids'][0]
             # Only one fluid found, we are going to use it
             
@@ -344,63 +365,64 @@ class MainFrame(wx.Frame):
         ax.cla()
         
         Type = self.state_plot_chooser.GetStringSelection()
-        if Type == 'Temperature/entropy':
-            # Plot saturation curves
-            ax.plot(self.ssatV, self.Tsat, 'k')
-            ax.plot(self.ssatL, self.Tsat, 'k')        
-            
-            ax.data, = ax.plot(self.processed_states['states'][0]['s'], 
-                               self.processed_states['states'][0]['T'], 'o')
-            ax.set_xlabel('Entropy $s$ [J/kg/K]')
-            ax.set_ylabel('Temperature $T$ [K]')
-            
-            smin,smax = (self.processed_states['limits']['smin'],
-                         self.processed_states['limits']['smax'])
-            Tmin,Tmax = (self.processed_states['limits']['Tmin'],
-                         self.processed_states['limits']['Tmax'])
-            
-            Tmax = max(CP.Props(self.fluid,'Tcrit')+1,Tmax)
-            ax.set_xlim(smin-(smax-smin)*0.2,smax + (smax-smin)*0.2)
-            ax.set_ylim(Tmin-5,Tmax)
-                    
-        elif Type == 'Pressure/enthalpy':
-            # Plot saturation curves
-            ax.plot(self.hsatV, self.psatV, 'k')
-            ax.plot(self.hsatL, self.psatL, 'k')        
-            
-            ax.data, = ax.plot(self.processed_states['states'][0]['h'], 
-                               self.processed_states['states'][0]['p'], 'o')
-            ax.set_xlabel('Enthalpy $h$ [J/kg]')
-            ax.set_ylabel('Pressure $p$ [Pa]')
-            hmin,hmax = (self.processed_states['limits']['hmin'],
-                         self.processed_states['limits']['hmax'])
-            pmin,pmax = (self.processed_states['limits']['pmin'],
-                         self.processed_states['limits']['pmax'])
-            
-            pmin,pmax = max(pmin-0.05*(pmax-pmin),0),max(CP.PropsSI(self.fluid,'pcrit')*1.05,pmax)
-
-            ax.set_xlim(hmin-(hmax-hmin)*0.2, hmax + (hmax-hmin)*0.2)
-            ax.set_ylim(pmin, pmax)
-            ax.set_yscale('log')
-                    
-        elif Type == 'Pressure/density':
-            # Plot saturation curves
-            ax.plot(self.rhosatV, self.psatV, 'k')
-            ax.plot(self.rhosatL, self.psatL, 'k')        
-            
-            ax.data, = ax.plot(self.processed_states['states'][0]['rho'], 
-                               self.processed_states['states'][0]['p'], 'o')
-            ax.set_xlabel(r'Density $\rho$ [kg/m$^3$]')
-            ax.set_ylabel('Pressure $p$ [Pa]')
-            ax.set_xlim(self.processed_states['limits']['rhomin'],
-                        self.processed_states['limits']['rhomax'])
+        if self.processed_states is not None:
+            if Type == 'Temperature/entropy':
+                # Plot saturation curves
+                ax.plot(self.ssatV, self.Tsat, 'k')
+                ax.plot(self.ssatL, self.Tsat, 'k')        
+                
+                ax.data, = ax.plot(self.processed_states['states'][0]['s'], 
+                                self.processed_states['states'][0]['T'], 'o')
+                ax.set_xlabel('Entropy $s$ [J/kg/K]')
+                ax.set_ylabel('Temperature $T$ [K]')
+                
+                smin,smax = (self.processed_states['limits']['smin'],
+                            self.processed_states['limits']['smax'])
+                Tmin,Tmax = (self.processed_states['limits']['Tmin'],
+                            self.processed_states['limits']['Tmax'])
+                
+                Tmax = max(CP.Props(self.fluid,'Tcrit')+1,Tmax)
+                ax.set_xlim(smin-(smax-smin)*0.2,smax + (smax-smin)*0.2)
+                ax.set_ylim(Tmin-5,Tmax)
                         
-            pmin,pmax = (self.processed_states['limits']['pmin'],
-                        self.processed_states['limits']['pmax'])
-            
-            pmin,pmax = max(pmin-0.05*(pmax-pmin),0),max(CP.PropsSI(self.fluid,'pcrit')*1.05,pmax)
-            ax.set_ylim(pmin, pmax)
-            ax.set_yscale('log')
+            elif Type == 'Pressure/enthalpy':
+                # Plot saturation curves
+                ax.plot(self.hsatV, self.psatV, 'k')
+                ax.plot(self.hsatL, self.psatL, 'k')        
+                
+                ax.data, = ax.plot(self.processed_states['states'][0]['h'], 
+                                self.processed_states['states'][0]['p'], 'o')
+                ax.set_xlabel('Enthalpy $h$ [J/kg]')
+                ax.set_ylabel('Pressure $p$ [Pa]')
+                hmin,hmax = (self.processed_states['limits']['hmin'],
+                            self.processed_states['limits']['hmax'])
+                pmin,pmax = (self.processed_states['limits']['pmin'],
+                            self.processed_states['limits']['pmax'])
+                
+                pmin,pmax = max(pmin-0.05*(pmax-pmin),0),max(CP.PropsSI(self.fluid,'pcrit')*1.05,pmax)
+    
+                ax.set_xlim(hmin-(hmax-hmin)*0.2, hmax + (hmax-hmin)*0.2)
+                ax.set_ylim(pmin, pmax)
+                ax.set_yscale('log')
+                        
+            elif Type == 'Pressure/density':
+                # Plot saturation curves
+                ax.plot(self.rhosatV, self.psatV, 'k')
+                ax.plot(self.rhosatL, self.psatL, 'k')        
+                
+                ax.data, = ax.plot(self.processed_states['states'][0]['rho'], 
+                                self.processed_states['states'][0]['p'], 'o')
+                ax.set_xlabel(r'Density $\rho$ [kg/m$^3$]')
+                ax.set_ylabel('Pressure $p$ [Pa]')
+                ax.set_xlim(self.processed_states['limits']['rhomin'],
+                            self.processed_states['limits']['rhomax'])
+                            
+                pmin,pmax = (self.processed_states['limits']['pmin'],
+                            self.processed_states['limits']['pmax'])
+                
+                pmin,pmax = max(pmin-0.05*(pmax-pmin),0),max(CP.PropsSI(self.fluid,'pcrit')*1.05,pmax)
+                ax.set_ylim(pmin, pmax)
+                ax.set_yscale('log')
         
         if self.processed_T_profile is not None:
             ax = self.T_profile_plot.ax
@@ -445,26 +467,31 @@ class MainFrame(wx.Frame):
         # ---------------- time ------------------
         
         # Update the text version of the time
-        self.bottompanel.timetext.SetValue(str(self.processed_states['time'][i-1]))
+        if self.processed_states is not None:
+            self.bottompanel.timetext.SetValue(str(self.processed_states['time'][i-1]))
+        else:
+            self.bottompanel.timetext.SetValue(str(self.processed_T_profile['time'][i-1]))
+            
         
         # --------------- State points ----------------------
         
         ax = self.state_points_plot.ax
         
-        Type = self.state_plot_chooser.GetStringSelection()
-        
-        if Type == 'Temperature/entropy':            
-            x,y = self.processed_states['states'][i]['s'],self.processed_states['states'][i]['T']
-        elif Type == 'Pressure/enthalpy':            
-            x,y = self.processed_states['states'][i]['h'],self.processed_states['states'][i]['p']
-        elif Type == 'Pressure/density':
-            x,y = self.processed_states['states'][i]['rho'],self.processed_states['states'][i]['p']
+        if self.processed_states is not None:
+            Type = self.state_plot_chooser.GetStringSelection()
+    
+            if Type == 'Temperature/entropy':            
+                x,y = self.processed_states['states'][i]['s'],self.processed_states['states'][i]['T']
+            elif Type == 'Pressure/enthalpy':            
+                x,y = self.processed_states['states'][i]['h'],self.processed_states['states'][i]['p']
+            elif Type == 'Pressure/density':
+                x,y = self.processed_states['states'][i]['rho'],self.processed_states['states'][i]['p']
+                
+            # Set the data
+            ax.data.set_data(x,y)
             
-        # Set the data
-        ax.data.set_data(x,y)
-        
-        # Force a redraw
-        self.state_points_plot.canvas.draw()
+            # Force a redraw
+            self.state_points_plot.canvas.draw()
 
         # -------------- T profiles -----------------------
         
@@ -492,13 +519,20 @@ class MainFrame(wx.Frame):
         
     def OnLoadMat(self, event = None):
         
-        # Get last folder that was used
-        
+        # Get last folder that was used if we can
         defaultDir = '.'
-        if os.path.exists('last_directory'):
-            directory = open('last_directory','r').read().strip()
-            if os.path.exists(directory):
-                defaultDir = directory
+        lastdir_file_path = os.path.join(home_folder,'.thermocycleviewer_last_directory')
+        if os.path.exists(lastdir_file_path):
+            try:
+                fp = open(lastdir_file_path,'r')
+                directory = fp.read().strip()
+                fp.close()
+                if os.path.exists(directory):
+                    defaultDir = directory
+            except IOError:
+                dlg = wx.MessageDialog(None, "Unable to load last_directory from "+lastdir_file_path)
+                dlg.ShowModal()
+                dlg.Destroy()
         
         FD = wx.FileDialog(None,
                            "Load MAT file",
@@ -508,9 +542,15 @@ class MainFrame(wx.Frame):
         
         if wx.ID_OK == FD.ShowModal():
             root,file = os.path.split(FD.GetPath())
-            f = open('last_directory','w')
-            print >> f, root
-            f.close()
+            
+            try:
+                f = open(lastdir_file_path,'w')
+                print >> f, root
+                f.close()
+            except IOError:
+                dlg = wx.MessageDialog(None, "Unable to write last_directory to "+lastdir_file_path)
+                dlg.ShowModal()
+                dlg.Destroy()
             
             isok = False
             while isok == False:
