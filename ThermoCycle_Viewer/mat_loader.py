@@ -86,6 +86,8 @@ def find_T_profiles(filename, Ninterp):
         # Interpolate onto the gridded times, and save the data back to 
         # processed
         for i,el in enumerate(processed[profile]):
+            if time_old.shape != el.shape and el.shape == (2,) and el[0] == el[1]:
+                el = el[0]*np.ones_like(time_old)
             el_new = scipy.interpolate.interp1d(time_old, el)(time_interp)
             
             processed[profile][i] = el_new

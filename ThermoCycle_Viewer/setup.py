@@ -16,11 +16,11 @@ if len(sys.argv)==1:
 # Process the includes, excludes and packages first
 
 include_files = []
-includes = ['numpy','scipy.sparse.csgraph._validation','scipy.special._ufuncs_cxx']
+includes = ['numpy','scipy.sparse.csgraph._validation']
 excludes = ['_gtkagg', '_tkagg', 'bsddb', 'curses', 'email', 'PyQt4',
             'pywin.debugger', 'pywin.debugger.dbgcon', 'pywin.dialogs',
-            'tcl', 'Tkconstants', 'Tkinter','sympy']
-packages = ['h5py','CoolProp','scipy','scipy.special','scipy.interpolate']
+            'tcl', 'Tkconstants', 'Tkinter','sympy','IPython']
+packages = ['h5py','CoolProp','scipy','scipy.special','scipy.interpolate','scipy.integrate','scipy.optimize']
 path = []
 
 # This is a place where the user custom code may go. You can do almost
@@ -33,6 +33,19 @@ import glob,os
 include_files += ['logo_thermocycle.png',
                   'logo_thermocycle.ico',
                   'SQThesisModel.mat']
+                  
+import os, glob2, numpy, scipy
+explore_dirs = [os.path.dirname(numpy.__file__), os.path.dirname(scipy.__file__)]
+
+files = []
+for d in explore_dirs:
+    files.extend( glob2.glob( os.path.join(d, '**', '*.pyd') ) )
+
+# Now we have a list of .pyd files; iterate to build a list of tuples into 
+# include files containing the source path and the basename
+for f in files:
+    fn = f.split('c:\\Python27\\lib\\site-packages\\',1)[1].replace('\\','.').split('.pyd',1)[0]
+    includes.append(fn)                  
 
 # The setup for cx_Freeze is different from py2exe. Here I am going to
 # use the Python class Executable from cx_Freeze
