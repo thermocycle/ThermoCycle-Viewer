@@ -11,6 +11,7 @@ from wx.lib.wordwrap import wordwrap
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 from matplotlib.backends.backend_wxagg import NavigationToolbar2Wx as Toolbar        
 import threading
+import numpy as np
 
 version = "1.0"
 
@@ -136,7 +137,6 @@ class MainFrame(wx.Frame):
         leftpanel = wx.Window(self.splitter, style = wx.BORDER_SUNKEN)
         self.T_profile_listing = wx.ComboBox(leftpanel, style = wx.CB_READONLY)
         self.T_profile_plot = PlotPanel(leftpanel)
-        
         leftpanelsizer = wx.BoxSizer(wx.VERTICAL)
         leftpanelsizer.AddSpacer(10)
         leftpanelsizer.Add(self.T_profile_listing, 0, wx.ALIGN_CENTER_HORIZONTAL)
@@ -145,7 +145,6 @@ class MainFrame(wx.Frame):
         leftpanel.SetSizer(leftpanelsizer)
         
         rightpanel = wx.Window(self.splitter, style = wx.BORDER_SUNKEN)
-        
         self.state_points_plot = PlotPanel(rightpanel)
         self.state_plot_chooser = wx.ComboBox(rightpanel, style = wx.CB_READONLY)
         self.state_plot_chooser.AppendItems(['Temperature/entropy','Pressure/enthalpy','Pressure/density'])
@@ -220,6 +219,10 @@ class MainFrame(wx.Frame):
             How many elements in the interpolated time
         """
         
+        ###################################
+        #### Temperature profiles in HX ###
+        ###################################
+        
         raw_T_profile, self.processed_T_profile, self.Tmin_T_profile, self.Tmax_T_profile = find_T_profiles(mat, N)
         if raw_T_profile is None and self.processed_T_profile is None:
             dlg = wx.MessageDialog(None,"No temperature profiles were found")
@@ -254,15 +257,67 @@ class MainFrame(wx.Frame):
                 if root_name in self.Tprofile_key_map:
                     self.Tprofile_key_map[root_name].append((key,label))
                 else:
-                    self.Tprofile_key_map[root_name] = [(key,label)]       
+                    self.Tprofile_key_map[root_name] = [(key,label)]    
+                    
+        ####################################
+        #### Temperature profiles in TCS ###
+        ####################################
+        
+        r = Reader(mat, "dymola")
+        tcs_entries = []
+        for key in r.varNames():
+            if key.lower().startswith('thermoclinestorage_'):
+                the_key = key.split('.',1)[0]
+                if the_key not in tcs_entries:
+                    tcs_entries.append(the_key)
+                    
+        self.processed_tcs_data = {}
+        # Find the data for each TCS entry
+        for tcs in tcs_entries:
+            time_dummy, Ncell = r.values(tcs+'.N')
+            # Get the real time vector
+            time, T_dummy = r.values(tcs+'.T[1]')
             
+            # N is a two-entry constant (N[0] = N[1]), all values saved as double in MAT file
+            Ncell = int(Ncell[0])-1
+            
+            T = np.zeros((len(T_dummy), Ncell))
+            h = np.zeros_like(T)
+            Tinterp = np.zeros((N, Ncell))
+            hinterp = np.zeros_like(Tinterp)
+            
+            # For each time step, collect all the heights and temperatures
+            for i in range(len(T_dummy)):
+                T[i,:] = [r.values(tcs + '.T['+str(j+1)+']')[1][i] for j in range(Ncell)]
+                
+                # If a constant value, just use the constant value, otherwise use the full range of sizes
+                if r.values(tcs + '.H_vol['+str(1)+']')[1].size == 2:
+                    h[i,:] = [r.values(tcs + '.H_vol['+str(j+1)+']')[1][0] for j in range(Ncell)]
+                else:
+                    h[i,:] = [r.values(tcs + '.H_vol['+str(j+1)+']')[1][i] for j in range(Ncell)]
+                    
+            # Interpolate onto regularly spaced time vector
+            time_interp = np.linspace(0, max(time), N)
+            
+            for j in range(Ncell):
+                Tinterp[:,j] = scipy.interpolate.interp1d(time, T[:,j])(time_interp)
+                hinterp[:,j] = scipy.interpolate.interp1d(time, h[:,j])(time_interp)            
+                    
+            self.processed_tcs_data[tcs] = dict(T = Tinterp, h = hinterp)
+            
+        self.T_profile_listing.AppendItems(sorted(tcs_entries))
+        self.T_profile_listing.Fit()
+        self.T_profile_listing.Refresh()
+        
+        ####################################
+        ####       State variables       ###
+        ####################################
+        
         raw_states, self.processed_states = find_states(mat, N)
         if raw_states is None and self.processed_states is None:
             dlg = wx.MessageDialog(None,"No states were found")
             dlg.ShowModal()
             dlg.Destroy()
-        
-        raw_states
         
         # Start at beginning of simulation
         self.bottompanel.step.SetMax(N)
@@ -424,7 +479,7 @@ class MainFrame(wx.Frame):
                 ax.set_ylim(pmin, pmax)
                 ax.set_yscale('log')
         
-        if self.processed_T_profile is not None:
+        if self.processed_T_profile is not None or self.processed_tcs_data is not None:
             ax = self.T_profile_plot.ax
             
             ax.cla()
@@ -432,29 +487,55 @@ class MainFrame(wx.Frame):
             # Get the component that is selected
             component = self.T_profile_listing.GetStringSelection()
             
-            # Get the limits over the entire time for all profiles being plotted
-            ymax = max([self.processed_T_profile['limits']['Tmax'][key] for key,label in self.Tprofile_key_map[component]])
-            ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
+            if component.find('T_profile') > -1:
             
-            # Iterate over the profiles to be plotted
-            lines = []
-            for key,label in self.Tprofile_key_map[component]:
+                # Get the limits over the entire time for all profiles being plotted
+                ymax = max([self.processed_T_profile['limits']['Tmax'][key] for key,label in self.Tprofile_key_map[component]])
+                ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
                 
-                vals = [el[0] for el in self.processed_T_profile[key]]
+                # Iterate over the profiles to be plotted
+                lines = []
+                for key,label in self.Tprofile_key_map[component]:
+                    
+                    vals = [el[0] for el in self.processed_T_profile[key]]
+                    
+                    line, = ax.plot(range(len(vals)), vals, 'o-', label = label)
+                    
+                    lines.append(line)
                 
-                line, = ax.plot(range(len(vals)), vals, 'o-', label = label)
+                ax.data = lines
+                    
+                ax.legend(loc = 'best')        
                 
-                lines.append(line)
+                # Set axis limits
+                ax.set_ylim(ymin-5, ymax+5)
+                
+                ax.set_xlabel('Node index')
+                ax.set_ylabel('Temperature $T$ [K]')
             
-            ax.data = lines
+            elif component in self.processed_tcs_data:
                 
-            ax.legend(loc = 'best')        
-            
-            # Set axis limits
-            ax.set_ylim(ymin-5, ymax+5)
-            
-            ax.set_xlabel('Node index')
-            ax.set_ylabel('Temperature $T$ [K]')
+                T = self.processed_tcs_data[component]['T']
+                h = self.processed_tcs_data[component]['h']
+                Tmin = np.min(T)
+                Tmax = np.max(T)
+                hmin = np.min(h)
+                hmax = np.max(h)
+                
+                tcs = self.processed_tcs_data[component]
+                
+                line, = ax.plot(T[0,:], h[0,:], '-', lw = 3)
+                ax.data = [line]
+                
+                # Set axis limits
+                ax.set_xlim(Tmin-1, Tmax+1)
+                ax.set_ylim(hmin, hmax)
+                
+                ax.set_ylabel('Cell midline height [m]')
+                ax.set_xlabel('Temperature $T$ [K]')
+                
+            else:
+                pass
             
     def OnChangeStep(self, event = None):
         """
@@ -495,7 +576,7 @@ class MainFrame(wx.Frame):
 
         # -------------- T profiles -----------------------
         
-        if self.processed_T_profile is not None:
+        if self.processed_T_profile is not None or self.processed_tcs_data is not None:
             
             # Get the axis
             ax = self.T_profile_plot.ax
@@ -503,14 +584,36 @@ class MainFrame(wx.Frame):
             # Get the component that is selected
             component = self.T_profile_listing.GetStringSelection()
             
-            # Iterate over the profiles to be plotted
-            for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
+            if component.find('T_profile') > -1:
+                # Iterate over the profiles to be plotted
+                for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
+                    
+                    # Get the temperatures for the profile
+                    vals = [el[i] for el in self.processed_T_profile[key]]
+                    
+                    # Set the data for the profile
+                    ax.data[j].set_data(range(len(vals)), vals)
+            elif component in self.processed_tcs_data:
+                tcs = self.processed_tcs_data[component]
+                T = tcs['T']
+                h = tcs['h']
                 
-                # Get the temperatures for the profile
-                vals = [el[i] for el in self.processed_T_profile[key]]
+                ax.data[0].set_data(T[i,:], h[i,:])
                 
-                # Set the data for the profile
-                ax.data[j].set_data(range(len(vals)), vals)
+                #~ TTT = np.zeros((h[i,:].size,2))
+                #~ HHH = np.zeros_like(TTT)
+                #~ CCC = np.zeros_like(TTT)
+                #~ HHH[:,0] = h[i,:]
+                #~ HHH[:,1] = h[i,:]
+                #~ TTT[:,0] = np.min(T)
+                #~ TTT[:,1] = np.max(T)
+                #~ CCC[:,0] = T[i,:]
+                #~ CCC[:,1] = T[i,:]
+                
+                #~ ax.pcolormesh(TTT,HHH,CCC)
+                
+            else:
+                pass
             
             # Force a redraw
             self.T_profile_plot.canvas.draw()
