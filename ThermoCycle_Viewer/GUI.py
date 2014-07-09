@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import matplotlib
 matplotlib.use('WXAgg')
 import wx
@@ -239,8 +241,9 @@ class MainFrame(wx.Frame):
         
             profiles = set([key.rsplit('.',1)[0] for key in keys])
         
-            if 'limits' in profiles:
-                profiles.remove('limits')
+            for temp_value in ['limits','Xaxis']:
+                if temp_value in profiles:
+                    profiles.remove(temp_value)
         
             self.T_profile_listing.Clear()
             self.T_profile_listing.AppendItems(sorted(profiles))
@@ -251,19 +254,20 @@ class MainFrame(wx.Frame):
             # Build a dictionary mapping from processed key root name to tuple of (full profile name, label)
             self.Tprofile_key_map = {}
             for key in sorted(self.processed_T_profile.keys()):
-                if key in ['time','limits']: 
+                if key in ['time','limits','Xaxis']:
                     continue
                 root_name,label = key.rsplit('.',1)
                 if root_name in self.Tprofile_key_map:
                     self.Tprofile_key_map[root_name].append((key,label))
                 else:
-                    self.Tprofile_key_map[root_name] = [(key,label)]    
+                    self.Tprofile_key_map[root_name] = [(key,label)]
                     
         ####################################
         #### Temperature profiles in TCS ###
         ####################################
         
         r = Reader(mat, "dymola")
+        
         tcs_entries = []
         for key in r.varNames():
             if key.lower().startswith('thermoclinestorage_'):
@@ -353,11 +357,11 @@ class MainFrame(wx.Frame):
             
         else:
             
-            message = "More than one fluid found {fluids:s}, please select fluid".format(fluids =str(self.processed_states['fluids']))
+            message = "More than one potential fluid found, please select fluid".format(fluids =str(self.processed_states['fluids']))
             
             dlg = wx.SingleChoiceDialog(
-                self, message, 'The Caption',
-                sorted(CoolProp.__fluids__), 
+                self, message, 'Select the working fluid',
+                sorted(self.processed_states['fluids']), 
                 wx.CHOICEDLG_STYLE
                 )
             if dlg.ShowModal() == wx.ID_OK:
@@ -499,13 +503,19 @@ class MainFrame(wx.Frame):
                     
                     vals = [el[0] for el in self.processed_T_profile[key]]
                     
-                    line, = ax.plot(range(len(vals)), vals, 'o-', label = label)
+                    if 'Xaxis' in self.processed_T_profile:
+                        Xaxis = self.processed_T_profile['Xaxis']
+                        x = [Xaxis[ni][0] for ni in range(len(Xaxis))] # ni is the index of the node in the profile, i is the step index
+                        line, = ax.plot(x, vals, 'o-', label = label)
+                    else:
+                        # Set the data for the profile
+                        line, = ax.plot(range(len(vals)), vals, 'o-', label = label)           
                     
                     lines.append(line)
                 
                 ax.data = lines
                     
-                ax.legend(loc = 'best')        
+                ax.legend(loc = 'best')
                 
                 # Set axis limits
                 ax.set_ylim(ymin-5, ymax+5)
@@ -585,14 +595,22 @@ class MainFrame(wx.Frame):
             component = self.T_profile_listing.GetStringSelection()
             
             if component.find('T_profile') > -1:
+                
                 # Iterate over the profiles to be plotted
                 for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
                     
                     # Get the temperatures for the profile
                     vals = [el[i] for el in self.processed_T_profile[key]]
                     
-                    # Set the data for the profile
-                    ax.data[j].set_data(range(len(vals)), vals)
+                    if 'Xaxis' in self.processed_T_profile:
+                        
+                        Xaxis = self.processed_T_profile['Xaxis']
+                        x = [Xaxis[ni][i] for ni in range(len(Xaxis))] # ni is the index of the node in the profile, i is the step index
+                        ax.data[j].set_data(x, vals)
+                    else:
+                        # Set the data for the profile
+                        ax.data[j].set_data(range(len(vals)), vals)
+                    
             elif component in self.processed_tcs_data:
                 tcs = self.processed_tcs_data[component]
                 T = tcs['T']
@@ -648,7 +666,7 @@ class MainFrame(wx.Frame):
             
             try:
                 f = open(lastdir_file_path,'w')
-                print >> f, root
+                f.write(root)
                 f.close()
             except IOError:
                 dlg = wx.MessageDialog(None, "Unable to write last_directory to "+lastdir_file_path)

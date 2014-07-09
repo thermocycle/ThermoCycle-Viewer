@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-from buildingspy.io.outputfile import Reader
+#from buildingspy.io.outputfile import Reader
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.interpolate
@@ -8,6 +8,69 @@ import copy
 import CoolProp
 import CoolProp.CoolProp as CP
 import subprocess
+import scipy.io
+
+class Reader(object):
+    
+    def __init__(self, filename, dummy_string):
+        mat_data = scipy.io.loadmat(filename)
+        
+        names_shape = mat_data['data_1'].shape
+        
+        Nelements = max(mat_data['dataInfo'].shape)
+        assert(Nelements > min(mat_data['dataInfo'].shape))
+        
+        nr, nc = mat_data['dataInfo'].shape
+        
+        # Transpose the data so that the first index is the item of interest
+        if nr > nc:
+            names = mat_data['name'] # Don't touch
+            data_1 = mat_data['data_1'].T
+            data_2 = mat_data['data_2'].T
+            dataInfo = mat_data['dataInfo']
+        else:
+            # Split up each string
+            list_of_lists = [[_ for _ in row] for row in mat_data['name']]
+            
+            # Put them all into a matrix, transpose it
+            transposed = np.array(list_of_lists).T
+            
+            # Split back up into list of strings; add a '\x00' to each one to split properly later on
+            names = [''.join(t.tolist()).strip()+'\x00' for t in transposed]
+            data_1 = mat_data['data_1']
+            data_2 = mat_data['data_2']
+            dataInfo = mat_data['dataInfo'].T
+        
+        data = {}
+        data['time'] = data_2[0,:]
+        for i in range(Nelements):
+            element_name = ''.join(str(names[i]))
+            
+            # One row looks like 1, 2, 0, -1 - indexes are 1-based
+            data_index, index = dataInfo[i, 0:2]
+            
+            # Make the index 0-based
+            index -= 1
+            
+            if index < 0: continue
+            
+            if data_index == 1:
+                values = np.ones_like(data['time'])*data_1[index,0]
+            else:
+                values = data_2[index,:]
+                
+            # Remove the \x00
+            element_name = element_name.encode('ascii').split('\x00',1)[0]
+                
+            data[element_name] = values
+            
+        self.data = data
+        
+    def varNames(self):
+        return self.data.keys()
+        
+    def values(self, key):
+        return self.data['time'], self.data[key]
 
 class struct(object): pass
     
@@ -29,6 +92,7 @@ def find_T_profiles(filename, Ninterp):
         return None,None,None,None
 
     raw = {}
+    has_xaxis = False
 
     # More post-processing on T_profile names
     for name in T_profile_names:
@@ -38,13 +102,37 @@ def find_T_profiles(filename, Ninterp):
             (time, N) = r.values(name)
             
             # N comes out as a 2 element array with the floating point value in both cells
-            N = int(N[0]) 
+            N = int(N[0])
             
             # Get the root name for the profile, something like 'Condenser.Summary.T_profile'
             root_name = name.strip('.n')
             
             # Find entries that match the root name
-            root_matches = find_matches(T_profile_names,root_name)
+            root_matches = find_matches(T_profile_names, root_name)
+            
+            Xaxis = []
+            
+            # ------------------------------
+            # Extract the Xaxis if it has it
+            # ------------------------------
+            for i in range(1, N+1):
+                    
+                # Get the root name - something like 'Evaporator.Summary.T_profile.Twall'
+                xaxis_name = root_name + '.Xaxis[' + str(i) + ']'
+                
+                if xaxis_name in root_matches:
+                    
+                    # Get the actual value
+                    (time, vals) = r.values(xaxis_name)
+                    
+                    # Append to the list
+                    Xaxis.append(vals)
+                    
+                    # Remove key so it doesn't end up in the temperature profiles
+                    root_matches.remove(xaxis_name)
+                    
+            if Xaxis:
+                has_xaxis = True
             
             # Loop over the number of elements in the profile
             for i in range(1, N+1):
@@ -85,9 +173,8 @@ def find_T_profiles(filename, Ninterp):
             
         # Interpolate onto the gridded times, and save the data back to 
         # processed
-        for i,el in enumerate(processed[profile]):
-            if time_old.shape != el.shape and el.shape == (2,) and el[0] == el[1]:
-                el = el[0]*np.ones_like(time_old)
+        for i, el in enumerate(processed[profile]):
+            
             el_new = scipy.interpolate.interp1d(time_old, el)(time_interp)
             
             processed[profile][i] = el_new
@@ -99,6 +186,22 @@ def find_T_profiles(filename, Ninterp):
                 min_Tprofile[profile] = np.min(el_new)
     
     processed['limits'] = dict(Tmin = min_Tprofile, Tmax = max_Tprofile)
+    
+    # Interpolate onto the gridded times, and save the data back to processed
+    if has_xaxis:
+        for i, el in enumerate(Xaxis):
+            if time_old.shape != el.shape:
+                if el.shape == (2,) and el[0] == el[1]:
+                    el = el[0]*np.ones_like(time_old)
+                elif time_old.shape == (2,):
+                    print('reshaping', time_old)
+                    time_old = np.linspace(time_old[0], time_old[1], el.size)
+                else:
+                    print(time_old.shape, el.shape)
+            
+            Xaxis[i] = scipy.interpolate.interp1d(time_old, el)(time_interp)
+        
+        processed['Xaxis'] = Xaxis
     
     # Save the gridded time into processed
     processed['time'] = time_interp
@@ -183,6 +286,7 @@ def find_states(filename, Ninterp):
             if k in ['fluid', 'fluid_diff']: continue
             if time_old.shape != val.shape and val.shape == (2,) and val[0] == val[1]:
                 val = val[0]*np.ones_like(time_old)
+                
             val_new = scipy.interpolate.interp1d(time_old, val)(time_interp)
             setattr(processed[state], k, val_new)
     

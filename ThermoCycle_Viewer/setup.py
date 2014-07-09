@@ -20,7 +20,7 @@ includes = ['numpy','scipy.sparse.csgraph._validation']
 excludes = ['_gtkagg', '_tkagg', 'bsddb', 'curses', 'email', 'PyQt4',
             'pywin.debugger', 'pywin.debugger.dbgcon', 'pywin.dialogs',
             'tcl', 'Tkconstants', 'Tkinter','sympy','IPython']
-packages = ['h5py','CoolProp','scipy','scipy.special','scipy.interpolate','scipy.integrate','scipy.optimize']
+packages = ['scipy','numpy']
 path = []
 
 # This is a place where the user custom code may go. You can do almost
@@ -44,7 +44,8 @@ for d in explore_dirs:
 # Now we have a list of .pyd files; iterate to build a list of tuples into 
 # include files containing the source path and the basename
 for f in files:
-    fn = f.split('c:\\Python27\\lib\\site-packages\\',1)[1].replace('\\','.').split('.pyd',1)[0]
+    package_folder_path = os.path.normpath(os.path.join(os.path.dirname(numpy.__file__), '..')) + os.sep
+    fn = f.split(package_folder_path, 1)[1].replace('\\', '.').split('.pyd', 1)[0]
     includes.append(fn)                  
 
 # The setup for cx_Freeze is different from py2exe. Here I am going to
@@ -100,7 +101,9 @@ setup(
 # actions.
 # 
 if sys.platform.startswith('win'):
-    shutil.copy2('C:\\Python27\\Lib\\site-packages\\h5py\\zlib1.dll','ThermoCycleViewer\\zlib1.dll')
+    import h5py
+    h5py_path = os.path.dirname(h5py.__file__)
+    shutil.copy2(h5py_path+'\\zlib1.dll','ThermoCycleViewer\\zlib1.dll')
     #Further windows packaging things
     import subprocess
     #Compress the files if UPX is found on the system path
