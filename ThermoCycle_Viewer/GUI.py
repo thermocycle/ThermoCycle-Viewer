@@ -225,7 +225,7 @@ class MainFrame(wx.Frame):
         #### Temperature profiles in HX ###
         ###################################
         
-        raw_T_profile, self.processed_T_profile, self.Tmin_T_profile, self.Tmax_T_profile = find_T_profiles(mat, N)
+        raw_T_profile, self.processed_T_profile = find_T_profiles(mat, N)
         if raw_T_profile is None and self.processed_T_profile is None:
             dlg = wx.MessageDialog(None,"No temperature profiles were found")
             dlg.ShowModal()
@@ -305,7 +305,7 @@ class MainFrame(wx.Frame):
             
             for j in range(Ncell):
                 Tinterp[:,j] = scipy.interpolate.interp1d(time, T[:,j])(time_interp)
-                hinterp[:,j] = scipy.interpolate.interp1d(time, h[:,j])(time_interp)            
+                hinterp[:,j] = scipy.interpolate.interp1d(time, h[:,j])(time_interp)
                     
             self.processed_tcs_data[tcs] = dict(T = Tinterp, h = hinterp)
             
@@ -493,9 +493,20 @@ class MainFrame(wx.Frame):
             
             if component.find('T_profile') > -1:
             
-                # Get the limits over the entire time for all profiles being plotted
-                ymax = max([self.processed_T_profile['limits']['Tmax'][key] for key,label in self.Tprofile_key_map[component]])
-                ymin = min([self.processed_T_profile['limits']['Tmin'][key] for key,label in self.Tprofile_key_map[component]])
+                Tmat = []
+                # Collect all the temperatures that are not NAN into one matrix
+                for k, v in self.processed_T_profile.iteritems():
+                    if k in ['limits','time']:
+                        continue
+                    else:
+                        # Each of the time histories in the profile
+                        for arr in v:
+                            # At least one entry is a number and this key is for the component of interest
+                            if np.sum(np.isnan(arr)) != arr.size and k.find(component) > -1:
+                                Tmat.extend(arr)
+                # Get max and min
+                ymax = np.max(Tmat)
+                ymin = np.min(Tmat)
                 
                 # Iterate over the profiles to be plotted
                 lines = []

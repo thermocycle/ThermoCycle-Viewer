@@ -145,7 +145,11 @@ def find_T_profiles(filename, Ninterp):
                     
                     # Get the actual value
                     (time, vals) = r.values(element)
-                    
+
+                    # If constant, fill with NAN so it won't plot
+                    if (np.max(vals) - np.min(vals)) < 1e-10:
+                        vals[:] = np.nan
+
                     if element_root_name in raw:
                         raw[element_root_name].append(vals)
                     else:
@@ -178,12 +182,6 @@ def find_T_profiles(filename, Ninterp):
             el_new = scipy.interpolate.interp1d(time_old, el)(time_interp)
             
             processed[profile][i] = el_new
-            
-            if profile not in max_Tprofile or np.max(el_new) > max_Tprofile[profile]:
-                max_Tprofile[profile] = np.max(el_new)
-                
-            if profile not in min_Tprofile or np.min(el_new) < min_Tprofile[profile]:
-                min_Tprofile[profile] = np.min(el_new)
     
     processed['limits'] = dict(Tmin = min_Tprofile, Tmax = max_Tprofile)
     
@@ -206,7 +204,7 @@ def find_T_profiles(filename, Ninterp):
     # Save the gridded time into processed
     processed['time'] = time_interp
     
-    return raw, processed, min_Tprofile, max_Tprofile
+    return raw, processed
     
 def find_states(filename, Ninterp):
     
