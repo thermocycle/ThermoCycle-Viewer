@@ -7,6 +7,12 @@
 
 # Let's start with some default (for me) imports...
 
+import sys
+if sys.platform.startswith('win'):
+    import wx
+    if not wx.version().startswith('3.0.1.0.b20140104'):
+        raise ImportError('On windows, version of wxpython must be EXACTLY 3.0.1.0.b20140104')
+
 from cx_Freeze import setup, Executable
 import sys, os, shutil
 
@@ -88,7 +94,8 @@ setup(
                              "includes": includes,
                              "excludes": excludes,
                              "packages": packages,
-                             "path": path
+                             "path": path,
+                             "include_msvcr": True
                              }
                },
                            

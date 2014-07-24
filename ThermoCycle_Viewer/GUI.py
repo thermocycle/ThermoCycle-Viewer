@@ -807,7 +807,9 @@ if __name__ == '__main__':
     # after if __name__ == '__main__':
     freeze_support()
     
-    app = wx.App(False)
+    app = wx.App(True, filename = 'log.txt')
+    
+    wx.Log.SetLogLevel(0)
     
     if '--nosplash' not in sys.argv:
         Splash=SplashScreen(time = 1.0)

@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-#from buildingspy.io.outputfile import Reader
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.interpolate
