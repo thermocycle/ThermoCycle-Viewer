@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, division
 
 import matplotlib
 matplotlib.use('WXAgg')
@@ -508,6 +508,10 @@ class MainFrame(wx.Frame):
                 ymax = np.max(Tmat)
                 ymin = np.min(Tmat)
                 
+                xaxismat = None
+                if 'Xaxis' in self.processed_T_profile:
+                    xaxismat = np.array(self.processed_T_profile['Xaxis'])
+                
                 # Iterate over the profiles to be plotted
                 lines = []
                 for key,label in self.Tprofile_key_map[component]:
@@ -533,6 +537,13 @@ class MainFrame(wx.Frame):
                 
                 ax.set_xlabel('Node index')
                 ax.set_ylabel('Temperature $T$ [K]')
+                
+                if xaxismat is not None:
+                    ax.set_xlim(np.min(xaxismat), np.max(xaxismat))
+                    ax.set_xlabel('Xaxis')
+                    from matplotlib.ticker import FormatStrFormatter
+                    majorFormatter = FormatStrFormatter('%g')
+                    ax.xaxis.set_major_formatter(majorFormatter)
             
             elif component in self.processed_tcs_data:
                 

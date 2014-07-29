@@ -145,8 +145,8 @@ def find_T_profiles(filename, Ninterp):
                     # Get the actual value
                     (time, vals) = r.values(element)
 
-                    # If constant, fill with NAN so it won't plot
-                    if (np.max(vals) - np.min(vals)) < 1e-10:
+                    # If constant and zero, fill with NAN so it won't plot
+                    if (np.max(vals) - np.min(vals)) < 1e-10 and np.max(vals) < 1e-10:
                         vals[:] = np.nan
 
                     if element_root_name in raw:
