@@ -9,6 +9,14 @@ import CoolProp.CoolProp as CP
 import subprocess
 import scipy.io
 
+debug = 5
+
+def set_debug_level(level):
+    debug = level
+    
+def get_debug_level():
+    return debug
+
 class Reader(object):
     
     def __init__(self, filename, dummy_string):
@@ -86,6 +94,9 @@ def find_T_profiles(filename, Ninterp):
     # Find names that have a T_profile in them
     T_profile_names = find_matches(names, 'T_profile')
     
+    # Keep only the names that end with T_profile.n - this is how we detemine that it is a T_profile
+    T_profile_names = filter(lambda s: s.endswith('T_profile.n'), T_profile_names)
+    
     # No temperature profiles
     if not T_profile_names:
         return None,None,None,None
@@ -93,117 +104,101 @@ def find_T_profiles(filename, Ninterp):
     raw = {}
     has_xaxis = False
 
+    # Create an empty container to hold the data
+    X = {}
+    Y = {}
+    
     # More post-processing on T_profile names
-    for name in T_profile_names:
-        if name.endswith('T_profile.n'):
+    for full_profile_name in T_profile_names:
             
-            # How many entries we should find in the lists
-            (time, N) = r.values(name)
+        # How many entries we should find in the lists
+        (time, N) = r.values(full_profile_name)
+        
+        # Interpolated time data
+        time_interp = np.linspace(min(time), max(time), Ninterp)
             
-            # N comes out as a 2 element array with the floating point value in both cells
-            N = int(N[0])
-            
-            # Get the root name for the profile, something like 'Condenser.Summary.T_profile'
-            root_name = name.strip('.n')
-            
-            # Find entries that match the root name
-            root_matches = find_matches(T_profile_names, root_name)
-            
-            Xaxis = []
+        # N comes out as a 2 element array with the floating point value in both cells
+        N = int(N[0])
+        
+        # Number of time steps
+        M = len(time)
+        
+        # Get the root name for the profile, something like 'Condenser.Summary.T_profile'
+        root_name = full_profile_name.strip('.n')
+        
+        # The name for the first element in the Xaxis
+        xaxis_name = root_name + '.Xaxis[1]'
+        
+        # Find entries that match the root name
+        root_matches = find_matches(names, root_name)
+        
+        if xaxis_name in root_matches:                
+            has_xaxis = True
+            # Remove the xaxis_name so that it won't show up in curves
+            root_matches.remove(xaxis_name)
+        else:
+            has_xaxis = False
+        
+        #----------------------------------------------------------            
+        # Find all the curves that are associated with this profile
+        #----------------------------------------------------------
+        # They must have at least one element in them, so we can safely look for the [1] element
+        curves = find_matches(root_matches, '[1]')
+        
+        # Now strip off the index to yield just the full name for the curve
+        curves = [curve.split('[')[0] for curve in curves]
+                
+        # Some useful debug information
+        if debug > 0:
+            print('found the T_profile ' + root_name + ' with ' + str(N) + ' elements of ' + str(M) + ' time steps')
+            if has_xaxis:
+                print('found an Xaxis')
+            print('curves:',curves)
+                
+        if debug > 100:
+            print('keys matching root: ' + ','.join(sorted(root_matches)))
+        
+        # Structures to hold the values for this profile
+        Xaxis = np.zeros((N, Ninterp))
+        Yaxis = {curve:np.zeros((N, Ninterp)) for curve in curves} # dictionary mapping from full path for curve to y data
+        
+        # Loop over the number of elements in the profile
+        for i in range(1, N+1):
             
             # ------------------------------
             # Extract the Xaxis if it has it
             # ------------------------------
-            for i in range(1, N+1):
-                    
-                # Get the root name - something like 'Evaporator.Summary.T_profile.Twall'
-                xaxis_name = root_name + '.Xaxis[' + str(i) + ']'
+            
+            if has_xaxis:
+                # Get the actual value based on the root name
+                (time, vals) = r.values(root_name + '.Xaxis[' + str(i) + ']')
                 
-                if xaxis_name in root_matches:
-                    
-                    # Get the actual value
-                    (time, vals) = r.values(xaxis_name)
-                    
-                    # Append to the list
-                    Xaxis.append(vals)
-                    
-                    # Remove key so it doesn't end up in the temperature profiles
-                    root_matches.remove(xaxis_name)
-                    
-            if Xaxis:
-                has_xaxis = True
-            
-            # Loop over the number of elements in the profile
-            for i in range(1, N+1):
+                # Copy the value interpolated to the right time
+                Xaxis[i-1, :] = scipy.interpolate.interp1d(time, vals)(time_interp) # python uses 0-based indexing
+            else:
+                # Fill in with a dummy value equal to its index
+                Xaxis[i-1, :] = i # python uses 0-based indexing
                 
-                # Entries that have an entry containing the index - like [1]
-                for element in find_matches(root_matches, '['+str(i)+']'):
-                    
-                    # Get the root name - something like 'Evaporator.Summary.T_profile.Twall'
-                    element_root_name = element.split('[')[0]
-                    
-                    # Get the actual value
-                    (time, vals) = r.values(element)
+            # ------------------------------
+            # Extract the temperature data  
+            # ------------------------------
+            
+            for curve in curves:
+                
+                # Get the actual values
+                (time, vals) = r.values(curve + '[' + str(i) + ']')
 
-                    # If constant and zero, fill with NAN so it won't plot
-                    if (np.max(vals) - np.min(vals)) < 1e-10 and np.max(vals) < 1e-10:
-                        vals[:] = np.nan
-
-                    if element_root_name in raw:
-                        raw[element_root_name].append(vals)
-                    else:
-                        raw[element_root_name] = [vals]
-                        
-                    # Store the time in the dictionary too
-                    if 'time' not in raw:
-                        raw['time'] = time
+                # If constant and zero, fill with NAN so it won't plot
+                if (np.max(vals) - np.min(vals)) < 1e-10 and np.max(vals) < 1e-10:
+                    vals[:] = np.nan
+                
+                Yaxis[curve][i-1,:] = scipy.interpolate.interp1d(time, vals)(time_interp)
+                
+        # Write them back into the master dictionary
+        X[root_name] = Xaxis
+        Y[root_name] = Yaxis
     
-    max_Tprofile = {}
-    min_Tprofile = {}
-    
-    # Make a deepcopy to make sure the data gets copied, and not just the pointers
-    processed = copy.deepcopy(raw)
-    
-    # The old irregularly spaced time data
-    time_old = raw['time']
-    
-    # Interpolated time data
-    time_interp = np.linspace(min(time_old), max(time_old), Ninterp)
-    
-    # Now interpolate all the data onto regularly spaced grid in time
-    for profile in processed.keys():
-        if profile == 'time': continue #skip 'time', not a profile
-            
-        # Interpolate onto the gridded times, and save the data back to 
-        # processed
-        for i, el in enumerate(processed[profile]):
-            
-            el_new = scipy.interpolate.interp1d(time_old, el)(time_interp)
-            
-            processed[profile][i] = el_new
-    
-    processed['limits'] = dict(Tmin = min_Tprofile, Tmax = max_Tprofile)
-    
-    # Interpolate onto the gridded times, and save the data back to processed
-    if has_xaxis:
-        for i, el in enumerate(Xaxis):
-            if time_old.shape != el.shape:
-                if el.shape == (2,) and el[0] == el[1]:
-                    el = el[0]*np.ones_like(time_old)
-                elif time_old.shape == (2,):
-                    print('reshaping', time_old)
-                    time_old = np.linspace(time_old[0], time_old[1], el.size)
-                else:
-                    print(time_old.shape, el.shape)
-            
-            Xaxis[i] = scipy.interpolate.interp1d(time_old, el)(time_interp)
-        
-        processed['Xaxis'] = Xaxis
-    
-    # Save the gridded time into processed
-    processed['time'] = time_interp
-    
-    return raw, processed
+    return time, X, Y
     
 def find_states(filename, Ninterp):
     

@@ -225,8 +225,8 @@ class MainFrame(wx.Frame):
         #### Temperature profiles in HX ###
         ###################################
         
-        raw_T_profile, self.processed_T_profile = find_T_profiles(mat, N)
-        if raw_T_profile is None and self.processed_T_profile is None:
+        time, Xaxis, Yaxis = find_T_profiles(mat, N)
+        if time is None and Xaxis is None:
             dlg = wx.MessageDialog(None,"No temperature profiles were found")
             dlg.ShowModal()
             dlg.Destroy()
@@ -236,31 +236,18 @@ class MainFrame(wx.Frame):
             self.T_profile_listing.Refresh()
             self.T_profile_listing.SetSelection(0)
         else:
-            keys = self.processed_T_profile.keys()
-            keys.remove('time')
-        
-            profiles = set([key.rsplit('.',1)[0] for key in keys])
-        
-            for temp_value in ['limits','Xaxis']:
-                if temp_value in profiles:
-                    profiles.remove(temp_value)
-        
+            class dummy: pass
+            self.T_profile = dummy()
+            # Store the data
+            self.T_profile.time = time
+            self.T_profile.Xaxis = Xaxis
+            self.T_profile.Yaxis = Yaxis
+            
             self.T_profile_listing.Clear()
-            self.T_profile_listing.AppendItems(sorted(profiles))
+            self.T_profile_listing.AppendItems(sorted(Yaxis.keys()))
             self.T_profile_listing.Fit()
             self.T_profile_listing.Refresh()
             self.T_profile_listing.SetSelection(0)
-            
-            # Build a dictionary mapping from processed key root name to tuple of (full profile name, label)
-            self.Tprofile_key_map = {}
-            for key in sorted(self.processed_T_profile.keys()):
-                if key in ['time','limits','Xaxis']:
-                    continue
-                root_name,label = key.rsplit('.',1)
-                if root_name in self.Tprofile_key_map:
-                    self.Tprofile_key_map[root_name].append((key,label))
-                else:
-                    self.Tprofile_key_map[root_name] = [(key,label)]
                     
         ####################################
         #### Temperature profiles in TCS ###
@@ -483,7 +470,7 @@ class MainFrame(wx.Frame):
                 ax.set_ylim(pmin, pmax)
                 ax.set_yscale('log')
         
-        if self.processed_T_profile is not None or self.processed_tcs_data is not None:
+        if self.T_profile.Xaxis is not None or self.processed_tcs_data is not None:
             ax = self.T_profile_plot.ax
             
             ax.cla()
@@ -492,39 +479,26 @@ class MainFrame(wx.Frame):
             component = self.T_profile_listing.GetStringSelection()
             
             if component.find('T_profile') > -1:
-            
-                Tmat = []
-                # Collect all the temperatures that are not NAN into one matrix
-                for k, v in self.processed_T_profile.iteritems():
-                    if k in ['limits','time']:
-                        continue
-                    else:
-                        # Each of the time histories in the profile
-                        for arr in v:
-                            # At least one entry is a number and this key is for the component of interest
-                            if np.sum(np.isnan(arr)) != arr.size and k.find(component) > -1:
-                                Tmat.extend(arr)
-                # Get max and min
-                ymax = np.max(Tmat)
-                ymin = np.min(Tmat)
                 
-                xaxismat = None
-                if 'Xaxis' in self.processed_T_profile:
-                    xaxismat = np.array(self.processed_T_profile['Xaxis'])
+                X = self.T_profile.Xaxis[component]
+                Y = self.T_profile.Yaxis[component]
                 
-                # Iterate over the profiles to be plotted
+                # The list of curves to be plotted
+                curves = Y.keys()
+                                
+                # Get max and min for y over all the curves
+                ymax = max([ np.max(Y[curve][~np.isnan(Y[curve])]) for curve in curves])
+                ymin = min([ np.min(Y[curve][~np.isnan(Y[curve])]) for curve in curves])
+                
+                # Get max and min for x matrix
+                xmax = np.max(np.max(X))
+                xmin = np.min(np.min(X))
+                
+                # Plot the curves
                 lines = []
-                for key,label in self.Tprofile_key_map[component]:
+                for curve in curves:
                     
-                    vals = [el[0] for el in self.processed_T_profile[key]]
-                    
-                    if 'Xaxis' in self.processed_T_profile:
-                        Xaxis = self.processed_T_profile['Xaxis']
-                        x = [Xaxis[ni][0] for ni in range(len(Xaxis))] # ni is the index of the node in the profile, i is the step index
-                        line, = ax.plot(x, vals, 'o-', label = label)
-                    else:
-                        # Set the data for the profile
-                        line, = ax.plot(range(len(vals)), vals, 'o-', label = label)           
+                    line, = ax.plot(X[:,0], Y[curve][:,0], 'o-', label = curve.replace(component+'.',''))
                     
                     lines.append(line)
                 
@@ -538,8 +512,8 @@ class MainFrame(wx.Frame):
                 ax.set_xlabel('Node index')
                 ax.set_ylabel('Temperature $T$ [K]')
                 
-                if xaxismat is not None:
-                    ax.set_xlim(np.min(xaxismat), np.max(xaxismat))
+                if int(xmax) != X.shape[0]:
+                    ax.set_xlim(xmin, xmax)
                     ax.set_xlabel('Xaxis')
                     from matplotlib.ticker import FormatStrFormatter
                     majorFormatter = FormatStrFormatter('%g')
@@ -608,30 +582,31 @@ class MainFrame(wx.Frame):
 
         # -------------- T profiles -----------------------
         
-        if self.processed_T_profile is not None or self.processed_tcs_data is not None:
+        if self.T_profile.Xaxis is not None:
             
             # Get the axis
             ax = self.T_profile_plot.ax
             
-            # Get the component that is selected
+             # Get the component that is selected
             component = self.T_profile_listing.GetStringSelection()
             
             if component.find('T_profile') > -1:
                 
+                X = self.T_profile.Xaxis[component]
+                Y = self.T_profile.Yaxis[component]
+                
+                # The list of curves to be plotted
+                curves = Y.keys()
+                
                 # Iterate over the profiles to be plotted
-                for j,(key,label) in enumerate(self.Tprofile_key_map[component]):
+                for j, curve in enumerate(curves):
                     
                     # Get the temperatures for the profile
-                    vals = [el[i] for el in self.processed_T_profile[key]]
+                    x  = X[:, i]
+                    y  = Y[curve][:, i]
                     
-                    if 'Xaxis' in self.processed_T_profile:
-                        
-                        Xaxis = self.processed_T_profile['Xaxis']
-                        x = [Xaxis[ni][i] for ni in range(len(Xaxis))] # ni is the index of the node in the profile, i is the step index
-                        ax.data[j].set_data(x, vals)
-                    else:
-                        # Set the data for the profile
-                        ax.data[j].set_data(range(len(vals)), vals)
+                    # Set the data
+                    ax.data[j].set_data(x, y)
                     
             elif component in self.processed_tcs_data:
                 tcs = self.processed_tcs_data[component]
@@ -818,9 +793,7 @@ if __name__ == '__main__':
     # after if __name__ == '__main__':
     freeze_support()
     
-    app = wx.App(True, filename = 'log.txt')
-    
-    wx.Log.SetLogLevel(0)
+    app = wx.App(False)
     
     if '--nosplash' not in sys.argv:
         Splash=SplashScreen(time = 1.0)
