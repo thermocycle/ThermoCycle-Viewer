@@ -11,7 +11,7 @@ import sys
 if sys.platform.startswith('win'):
     import wx
     if not wx.version().startswith('3.0.1.0.b20140104'):
-        raise ImportError('On windows, version of wxpython must be EXACTLY 3.0.1.0.b20140104')
+        raise ImportError('On windows, version of wxpython must be EXACTLY 3.0.1.0.b20140104, found ' + wx.version())
 
 from cx_Freeze import setup, Executable
 import sys, os, shutil

@@ -9,7 +9,7 @@ import CoolProp.CoolProp as CP
 import subprocess
 import scipy.io
 
-debug = 5
+debug = 50000
 
 def set_debug_level(level):
     debug = level
@@ -78,6 +78,12 @@ class Reader(object):
         
     def values(self, key):
         return self.data['time'], self.data[key]
+        
+    def rename_key(self, key_old, key_new):
+        # First we make a copy of the data from the old name to the new name
+        self.data[key_new] = self.data[key_old]
+        # Then we remove the old data
+        del self.data[key_old]
 
 class struct(object): pass
     
@@ -97,9 +103,13 @@ def find_T_profiles(filename, Ninterp):
     # Keep only the names that end with T_profile.n - this is how we detemine that it is a T_profile
     T_profile_names = filter(lambda s: s.endswith('T_profile.n'), T_profile_names)
     
+    # Print what we find
+    if debug > 0:
+        print(T_profile_names)
+        
     # No temperature profiles
     if not T_profile_names:
-        return None,None,None,None
+        return None,None
 
     raw = {}
     has_xaxis = False
@@ -131,6 +141,37 @@ def find_T_profiles(filename, Ninterp):
         
         # Find entries that match the root name
         root_matches = find_matches(names, root_name)
+        
+        # Check if profile is 1D or 2D
+        
+        # Number in series
+        Ns_name = root_name + '.Ns'
+        if len(find_matches(names, Ns_name)) > 0:
+            
+            # So there is a Ns in the T_profile, that means it is a solar field (hopefully)
+            Ns = int(r.values(Ns_name)[1][0])
+            
+            for i in range(1, Ns+1): # Ns is the number of collectors in series
+                for j in range(1, N+1): # N is the number of cells per collector
+                    # The bracketed term in the name
+                    bracket = '[{i:d}, {j:d}]'.format(i=i, j=j)
+                    # find old key
+                    old_key_matches = find_matches(root_matches, bracket)
+                    # make sure you only found one
+                    assert(len(old_key_matches) == 1)
+                    old_key = old_key_matches[0]
+                    # the new key name
+                    new_key = old_key.replace(bracket,'[{k:d}]'.format(k=(i-1)*N+j))
+                    
+                    if debug > 10:
+                        print(i,j,old_key + ' --> ' + new_key)
+                        
+                    r.rename_key(old_key, new_key)
+                    
+            N = Ns*N
+                
+        # Find entries that match the root name (again, since we changed the names)
+        root_matches = find_matches(r.varNames(), root_name)
         
         if xaxis_name in root_matches:                
             has_xaxis = True
