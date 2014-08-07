@@ -9,7 +9,7 @@ import CoolProp.CoolProp as CP
 import subprocess
 import scipy.io
 
-debug = 50000
+debug = 0
 
 def set_debug_level(level):
     debug = level

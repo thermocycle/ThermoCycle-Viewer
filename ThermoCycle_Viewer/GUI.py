@@ -257,7 +257,7 @@ class MainFrame(wx.Frame):
         
         tcs_entries = []
         for key in r.varNames():
-            if key.lower().startswith('thermoclinestorage_'):
+            if key.lower().startswith('thermocline'):
                 the_key = key.split('.',1)[0]
                 if the_key not in tcs_entries:
                     tcs_entries.append(the_key)
