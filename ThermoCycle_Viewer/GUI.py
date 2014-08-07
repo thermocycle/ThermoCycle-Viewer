@@ -557,7 +557,7 @@ class MainFrame(wx.Frame):
         if self.processed_states is not None:
             self.bottompanel.timetext.SetValue(str(self.processed_states['time'][i-1]))
         else:
-            self.bottompanel.timetext.SetValue(str(self.processed_T_profile['time'][i-1]))
+            self.bottompanel.timetext.SetValue(str(self.T_profile.time[i-1]))
             
         
         # --------------- State points ----------------------

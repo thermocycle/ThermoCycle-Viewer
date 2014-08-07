@@ -147,6 +147,8 @@ def find_T_profiles(filename, Ninterp):
         # Number in series
         Ns_name = root_name + '.Ns'
         if len(find_matches(names, Ns_name)) > 0:
+            if debug > 10:
+                print('found a solar field')
             
             # So there is a Ns in the T_profile, that means it is a solar field (hopefully)
             Ns = int(r.values(Ns_name)[1][0])
