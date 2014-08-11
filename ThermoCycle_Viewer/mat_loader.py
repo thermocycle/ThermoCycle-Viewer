@@ -9,7 +9,7 @@ import CoolProp.CoolProp as CP
 import subprocess
 import scipy.io
 
-debug = 0
+debug = 5000
 
 def set_debug_level(level):
     debug = level
@@ -77,7 +77,11 @@ class Reader(object):
         return self.data.keys()
         
     def values(self, key):
-        return self.data['time'], self.data[key]
+        try:
+            return self.data['time'], self.data[key]
+        except KeyError:
+            print('unable to load key:', key)
+            return None, None
         
     def rename_key(self, key_old, key_new):
         # First we make a copy of the data from the old name to the new name
@@ -119,7 +123,7 @@ def find_T_profiles(filename, Ninterp):
     Y = {}
     
     # More post-processing on T_profile names
-    for full_profile_name in T_profile_names:
+    for full_profile_name in sorted(T_profile_names):
             
         # How many entries we should find in the lists
         (time, N) = r.values(full_profile_name)
@@ -147,11 +151,13 @@ def find_T_profiles(filename, Ninterp):
         # Number in series
         Ns_name = root_name + '.Ns'
         if len(find_matches(names, Ns_name)) > 0:
-            if debug > 10:
-                print('found a solar field')
             
             # So there is a Ns in the T_profile, that means it is a solar field (hopefully)
             Ns = int(r.values(Ns_name)[1][0])
+            
+            if debug > 10:
+                print('found a solar field', Ns_name, 'matches:', find_matches(names, Ns_name))
+                print(Ns, 'collectors;', N, 'cells per collector')
             
             for i in range(1, Ns+1): # Ns is the number of collectors in series
                 for j in range(1, N+1): # N is the number of cells per collector
@@ -159,16 +165,18 @@ def find_T_profiles(filename, Ninterp):
                     bracket = '[{i:d}, {j:d}]'.format(i=i, j=j)
                     # find old key
                     old_key_matches = find_matches(root_matches, bracket)
-                    # make sure you only found one
-                    assert(len(old_key_matches) == 1)
-                    old_key = old_key_matches[0]
-                    # the new key name
-                    new_key = old_key.replace(bracket,'[{k:d}]'.format(k=(i-1)*N+j))
-                    
-                    if debug > 10:
-                        print(i,j,old_key + ' --> ' + new_key)
+                    for old_key in old_key_matches:
+                        # make sure you only found one
+                        if debug > 10:
+                            print('old_key_matches:', old_key_matches)
                         
-                    r.rename_key(old_key, new_key)
+                        # the new key name
+                        new_key = old_key.replace(bracket,'[{k:d}]'.format(k=(i-1)*N+j))
+                        
+                        if debug > 10:
+                            print(i,j,old_key + ' --> ' + new_key)
+                            
+                        r.rename_key(old_key, new_key)
                     
             N = Ns*N
                 
@@ -189,7 +197,7 @@ def find_T_profiles(filename, Ninterp):
         curves = find_matches(root_matches, '[1]')
         
         # Now strip off the index to yield just the full name for the curve
-        curves = [curve.split('[')[0] for curve in curves]
+        curves = [curve.rsplit('[',1)[0] for curve in curves]
                 
         # Some useful debug information
         if debug > 0:
@@ -229,17 +237,25 @@ def find_T_profiles(filename, Ninterp):
             for curve in curves:
                 
                 # Get the actual values
+                if debug > 0:
+                    print(curve + '[' + str(i) + ']')
                 (time, vals) = r.values(curve + '[' + str(i) + ']')
-
-                # If constant and zero, fill with NAN so it won't plot
-                if (np.max(vals) - np.min(vals)) < 1e-10 and np.max(vals) < 1e-10:
-                    vals[:] = np.nan
                 
-                Yaxis[curve][i-1,:] = scipy.interpolate.interp1d(time, vals)(time_interp)
+                if vals is not None:
+                    # If constant and zero, fill with NAN so it won't plot
+                    if (np.max(vals) - np.min(vals)) < 1e-10 and np.max(vals) < 1e-10:
+                        vals[:] = np.nan
+                    
+                    Yaxis[curve][i-1,:] = scipy.interpolate.interp1d(time, vals)(time_interp)
+                else:
+                    
+                    Yaxis[curve][i-1,:] = np.nan
                 
-        # Write them back into the master dictionary
-        X[root_name] = Xaxis
-        Y[root_name] = Yaxis
+        if not np.all(np.isnan(Yaxis[curve])):
+            
+            # Write them back into the master dictionary
+            X[root_name] = Xaxis
+            Y[root_name] = Yaxis
     
     return time, X, Y
     

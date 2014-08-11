@@ -167,8 +167,7 @@ class MainFrame(wx.Frame):
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(self.splitter,1,wx.EXPAND)
         sizer.Add(self.bottompanel, 0, wx.EXPAND)
-        self.SetSizer(sizer)
-        sizer.Layout()
+        
         
         self.bottompanel.step.Bind(wx.EVT_SLIDER, self.OnChangeStep)
         self.bottompanel.play_button.Bind(wx.EVT_TOGGLEBUTTON, self.OnPlay)
@@ -186,6 +185,10 @@ class MainFrame(wx.Frame):
         
         # Pop up file loading dialog
         self.OnLoadMat()
+        
+        # Make all the sizers size appropriately
+        self.SetSizer(sizer)
+        sizer.Layout()
         
     def make_menu_bar(self):
         
