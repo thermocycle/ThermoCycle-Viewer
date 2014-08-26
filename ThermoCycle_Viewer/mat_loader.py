@@ -9,7 +9,7 @@ import CoolProp.CoolProp as CP
 import subprocess
 import scipy.io
 
-debug = 5000
+debug = 0
 
 def set_debug_level(level):
     debug = level
@@ -268,7 +268,7 @@ def find_states(filename, Ninterp):
         
         ps = []
         for fluid in CoolProp.__fluids__:
-            if T[0] < CP.Props(fluid, 'Tmin'): continue
+            if T[0] < CP.PropsSI(fluid, 'Tmin'): continue
             try:
                 ps.append(CP.PropsSI('P','T',float(T[0]),'D',float(rho[0]),fluid))
             except ValueError:

@@ -125,6 +125,8 @@ class PlotThread(threading.Thread):
     def task(self):
         if self._GUI.bottompanel.play_button.GetValue() == True:
             self._GUI.plot_step()
+        if self._GUI.menuToolsSaveAnimation.IsChecked() == True:
+            self._GUI.TakeScreenShot()
                 
 class MainFrame(wx.Frame):
     """
@@ -190,6 +192,10 @@ class MainFrame(wx.Frame):
         self.SetSizer(sizer)
         sizer.Layout()
         
+        # Default to not save screenshots to file
+        self._take_screenshots = False
+        self.animation_path = 'ani'
+        
     def make_menu_bar(self):
         
         # Menu Bar
@@ -204,10 +210,16 @@ class MainFrame(wx.Frame):
         self.File.AppendItem(self.menuFileQuit)
         self.MenuBar.Append(self.File, "File")
         
+        self.Tools = wx.Menu()
+        self.menuToolsSaveAnimation = wx.MenuItem(self.Tools, -1, "Save animation", "", wx.ITEM_CHECK)
+        self.Tools.AppendItem(self.menuToolsSaveAnimation)
+        self.MenuBar.Append(self.Tools, "Tools")
+        
         # Bind event handlers
         self.Bind(wx.EVT_MENU,self.OnLoadMat,self.menuFileOpen)
         self.Bind(wx.EVT_MENU,self.OnQuit,self.menuFileQuit)
         self.Bind(wx.EVT_MENU,self.OnAbout,self.menuFileAbout)
+        self.Bind(wx.EVT_MENU, self.OnToggleAnimation, self.menuToolsSaveAnimation)
         
         #Actually add menu bar
         self.SetMenuBar(self.MenuBar)  
@@ -330,46 +342,40 @@ class MainFrame(wx.Frame):
             self.rhosatV = None
             self.fluid = None
             
-        elif len(self.processed_states['fluids']) == 1:
-            fluid = self.processed_states['fluids'][0]
-            # Only one fluid found, we are going to use it
-            
-            self.Tsat = np.append(np.linspace(CP.Props(fluid,'Tmin'),CP.Props(fluid,'Tcrit')-0.5,200),np.linspace(CP.Props(fluid,'Tcrit')-0.5,CP.Props(fluid,'Tcrit')-0.005,50))
-            self.psatL = CP.PropsSI('P','T',self.Tsat,'Q',0,fluid)
-            self.psatV = CP.PropsSI('P','T',self.Tsat,'Q',1,fluid)
-            self.ssatL = CP.PropsSI('S','T',self.Tsat,'Q',0,fluid)
-            self.ssatV = CP.PropsSI('S','T',self.Tsat,'Q',1,fluid)
-            self.hsatL = CP.PropsSI('H','T',self.Tsat,'Q',0,fluid)
-            self.hsatV = CP.PropsSI('H','T',self.Tsat,'Q',1,fluid)
-            self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',0,fluid)
-            self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,fluid)
-            self.fluid = fluid
-            
         else:
-            
-            message = "More than one potential fluid found, please select fluid".format(fluids =str(self.processed_states['fluids']))
-            
-            dlg = wx.SingleChoiceDialog(
-                self, message, 'Select the working fluid',
-                sorted(self.processed_states['fluids']), 
-                wx.CHOICEDLG_STYLE
-                )
-            if dlg.ShowModal() == wx.ID_OK:
-                self.fluid = str(dlg.GetStringSelection())
-            else:
-                self.fluid = None
-    
-            dlg.Destroy()
+            fluid = 'none'
+            if len(self.processed_states['fluids']) == 1:
+                # Only one fluid found, we are going to use it if the user accepts it
+                fluid = self.processed_states['fluids'][0]
+                dlg = wx.MessageDialog(None, "Only one fluid found - " + fluid + ". Ok to accept, or cancel to manually select")
+                if dlg.ShowModal() != wx.ID_OK:
+                    fluid = 'none'
+                dlg.Destroy()
                 
-            self.Tsat = np.append(np.linspace(CP.Props(self.fluid,'Tmin'),CP.Props(self.fluid,'Tcrit')-0.5,200),np.linspace(CP.Props(self.fluid,'Tcrit')-0.5,CP.Props(self.fluid,'Tcrit')-0.1,50))
-            self.psatL = CP.PropsSI('P','T',self.Tsat,'Q',0,self.fluid)
-            self.psatV = CP.PropsSI('P','T',self.Tsat,'Q',1,self.fluid)
-            self.ssatL = CP.PropsSI('S','T',self.Tsat,'Q',0,self.fluid)
-            self.ssatV = CP.PropsSI('S','T',self.Tsat,'Q',1,self.fluid)
-            self.hsatL = CP.PropsSI('H','T',self.Tsat,'Q',0,self.fluid)
-            self.hsatV = CP.PropsSI('H','T',self.Tsat,'Q',1,self.fluid)
-            self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',0,self.fluid)
-            self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',1,self.fluid)
+            if fluid == 'none':
+                dlg = wx.SingleChoiceDialog(
+                    self, 'Select the working fluid', 'Select the working fluid',
+                    sorted(CoolProp.__fluids__), 
+                    wx.CHOICEDLG_STYLE
+                    )
+                if dlg.ShowModal() == wx.ID_OK:
+                    fluid = str(dlg.GetStringSelection())
+                else:
+                    fluid = None
+                    
+            if fluid is not None:
+                self.Tsat = np.append(np.linspace(CP.PropsSI(fluid,'Tmin'),CP.PropsSI(fluid,'Tcrit')-0.5,200),np.linspace(CP.PropsSI(fluid,'Tcrit')-0.5,CP.PropsSI(fluid,'Tcrit')-0.005,50))
+                self.psatL = CP.PropsSI('P','T',self.Tsat,'Q',[0]*len(self.Tsat),fluid)
+                self.psatV = CP.PropsSI('P','T',self.Tsat,'Q',[1]*len(self.Tsat),fluid)
+                self.ssatL = CP.PropsSI('S','T',self.Tsat,'Q',[0]*len(self.Tsat),fluid)
+                self.ssatV = CP.PropsSI('S','T',self.Tsat,'Q',[1]*len(self.Tsat),fluid)
+                self.hsatL = CP.PropsSI('H','T',self.Tsat,'Q',[0]*len(self.Tsat),fluid)
+                self.hsatV = CP.PropsSI('H','T',self.Tsat,'Q',[1]*len(self.Tsat),fluid)
+                self.rhosatL = CP.PropsSI('D','T',self.Tsat,'Q',[0]*len(self.Tsat),fluid)
+                self.rhosatV = CP.PropsSI('D','T',self.Tsat,'Q',[1]*len(self.Tsat),fluid)
+                self.fluid = fluid
+                    
+            self.fluid = fluid
         
         # Do the base plotting    
         self.OnBackgroundPlot()
@@ -430,7 +436,7 @@ class MainFrame(wx.Frame):
                 Tmin,Tmax = (self.processed_states['limits']['Tmin'],
                             self.processed_states['limits']['Tmax'])
                 
-                Tmax = max(CP.Props(self.fluid,'Tcrit')+1,Tmax)
+                Tmax = max(CP.PropsSI(self.fluid,'Tcrit')+1,Tmax)
                 ax.set_xlim(smin-(smax-smin)*0.2,smax + (smax-smin)*0.2)
                 ax.set_ylim(Tmin-5,Tmax)
                         
@@ -737,7 +743,24 @@ class MainFrame(wx.Frame):
             if hasattr(self,'PT'):
                 self.PT.shutdown()
                 del self.PT
-                
+          
+    def OnToggleAnimation(self, evt):
+        
+        if evt.IsChecked():
+            # Turn on saving of files
+            dlg = wx.MessageDialog(None, 'Image files will be stored in the selected directory, one PNG file per step in the animation.  It will over-write files if they already exist.  \n\nYou can convert to GIF using ImageMagick using a command like "convert *.png ani.gif"')
+            dlg.ShowModal(); dlg.Destroy()
+            FD = wx.DirDialog(None, "Select output directory", style=wx.RESIZE_BORDER)
+            if wx.ID_OK == FD.ShowModal(): 
+                self.animation_path = FD.GetPath()
+            FD.Destroy()
+            print(self.animation_path)
+            
+            self._take_screenshots = True
+        else:
+            # Turn off saving of files
+            self._take_screenshots = False
+        
     def TakeScreenShot(self):
         """ Takes a screenshot of the screen at give pos & size (rect). """
         rect = self.GetRect()
@@ -787,8 +810,10 @@ class MainFrame(wx.Frame):
         img = bmp.ConvertToImage()
         
         # Get the slider value
-        fileName = 'frame{i:04d}.png'.format(i=self.bottompanel.step.GetValue())
+        fileName = os.path.join(self.animation_path, 'frame{i:04d}.png'.format(i=self.bottompanel.step.GetValue()))
         img.SaveFile(fileName, wx.BITMAP_TYPE_PNG)
+        
+        print(fileName + 'written to file')
                           
 if __name__ == '__main__':
     # The following line is required to allow cx_Freeze 
